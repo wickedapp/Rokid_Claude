@@ -60,7 +60,7 @@ cd relay && npm install
 
 然后装客户端并配置:
 
-1. 从 [最新 Release](#) <!-- TODO: release link --> 侧载 APK(或自行构建:
+1. 从 [最新 Release](https://github.com/williamlzz/Rokid_Claude/releases/latest) 侧载 APK(或自行构建:
    `cd android && ./gradlew :app:assembleDebug`)。
 2. `cp config.example.json config.json`,填好 `serverUrl`,push 到设备。
 3. 跑 `./start.command`(USB),在设备上打开 Rokid Claude。

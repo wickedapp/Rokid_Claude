@@ -64,7 +64,7 @@ cd relay && npm install
 
 Then install the client and configure it:
 
-1. Sideload the APK from the [latest Release](#) <!-- TODO: release link --> (or
+1. Sideload the APK from the [latest Release](https://github.com/williamlzz/Rokid_Claude/releases/latest) (or
    build it: `cd android && ./gradlew :app:assembleDebug`).
 2. `cp config.example.json config.json`, set `serverUrl`, and push it to the
    device.
