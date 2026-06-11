@@ -24,4 +24,13 @@ class StringsTest {
         assertTrue(matchesExit("退出", "zh"))
         assertTrue(!matchesExit("continue", "en"))
     }
+    @Test fun wifiMatch() {
+        assertTrue(matchesWifi("网络", "zh"))
+        assertTrue(matchesWifi("wifi", "en"))
+        assertTrue(!matchesWifi("hello", "en"))
+    }
+    @Test fun offlineHint() {
+        assertEquals("tap: open WiFi · double-tap: exit", strings("en").offlineHint)
+        assertEquals("单击:打开WiFi · 双击:退出", strings("zh").offlineHint)
+    }
 }

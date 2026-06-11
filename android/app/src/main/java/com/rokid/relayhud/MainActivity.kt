@@ -1,8 +1,12 @@
 package com.rokid.relayhud
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.wifi.WifiManager
 import android.os.Bundle
+import android.provider.Settings
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -18,6 +22,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var voice: VoiceInput
     private val hud = HudState()
     private val conn = mutableStateOf("")
+    private val connected = mutableStateOf(false)
     private val audioGranted = mutableStateOf(false)
     @Volatile private var recording = false
     @Volatile private var running = false
@@ -40,11 +45,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** best-effort 开 WiFi(YodaOS 放行则无感联网;被拒不报错)。 */
+    private fun tryEnableWifi() {
+        try {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            @Suppress("DEPRECATION")
+            if (!wm.isWifiEnabled) wm.isWifiEnabled = true
+        } catch (_: Exception) {}
+    }
+
+    /** 拉起系统 WiFi 设置(离线自救入口)。优先轻量面板,不可用退完整设置。 */
+    private fun openWifiSettings() {
+        try {
+            startActivity(Intent(Settings.Panel.ACTION_WIFI).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) {
+            try { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         audioGranted.value =
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
+        tryEnableWifi()
         val cfg = loadConfig()
         lang = cfg.lang
         s = strings(lang)
@@ -69,6 +93,7 @@ class MainActivity : ComponentActivity() {
                             client.newSession(); hud.clear(); hud.status = s.newSessionMsg
                         }
                         matchesExit(msg.text, lang) -> { hud.status = s.exitMsg; finish() }
+                        matchesWifi(msg.text, lang) -> openWifiSettings()
                         else -> {
                             hud.add("▶ $t", Color(0xFF00AA77)); hud.status = s.submitting; running = true; refreshKeepOn()
                             client.sendPrompt(t)
@@ -79,7 +104,7 @@ class MainActivity : ComponentActivity() {
                     handle(msg, hud, s)
                 }
             },
-            onStatus = { conn.value = it },
+            onStatus = { text, isConn -> conn.value = text; connected.value = isConn },
         )
         client.connect()
 
@@ -91,7 +116,7 @@ class MainActivity : ComponentActivity() {
 
         if (!audioGranted.value) requestAudio.launch(Manifest.permission.RECORD_AUDIO)
 
-        setContent { HudScreen(state = hud, connStatus = conn.value, s = s) }
+        setContent { HudScreen(state = hud, connStatus = conn.value, s = s, connected = connected.value) }
     }
 
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
@@ -102,6 +127,12 @@ class MainActivity : ComponentActivity() {
             return true
         }
         if (SystemClock.uptimeMillis() - wokeAt < 700) return true   // 唤醒余波:吞掉同一手势的后续事件
+        // 离线(未连 relay):说话/转写无意义 → 手势改派自救。单击=开 WiFi 设置,双击=退出。
+        if (!connected.value && hud.choice == null) {
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK) { finish(); return true }
+            if (Gestures.map(keyCode, android.view.KeyEvent.ACTION_UP) == GestureAction.TAP) { openWifiSettings(); return true }
+            // 滑动等其它手势照常落到下方(翻页,无害)
+        }
         if (keyCode == android.view.KeyEvent.KEYCODE_BACK) { setBlanked(true); return true }  // 双击=主动灭屏
         // 选择模式优先截胡:前/后滑移动高亮,单击确认。
         val p = hud.choice

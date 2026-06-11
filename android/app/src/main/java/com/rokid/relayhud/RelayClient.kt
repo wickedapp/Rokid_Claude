@@ -14,7 +14,7 @@ class RelayClient(
     private val url: String,
     private val lang: String,
     private val onMessage: (ServerMessage) -> Unit,
-    private val onStatus: (String) -> Unit,
+    private val onStatus: (String, Boolean) -> Unit,
 ) {
     private val s = strings(lang)
     private val client = OkHttpClient()
@@ -28,7 +28,7 @@ class RelayClient(
             .build()
         ws = client.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                main.post { onStatus(s.connected) }
+                main.post { onStatus(s.connected, true) }
                 webSocket.send("""{"type":"hello","lang":"$lang"}""")
             }
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -36,11 +36,11 @@ class RelayClient(
                 main.post { onMessage(msg) }
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                main.post { onStatus(s.disconnected) }
+                main.post { onStatus(s.disconnected, false) }
                 scheduleReconnect()
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                main.post { onStatus(s.closed) }
+                main.post { onStatus(s.closed, false) }
                 scheduleReconnect()
             }
         })

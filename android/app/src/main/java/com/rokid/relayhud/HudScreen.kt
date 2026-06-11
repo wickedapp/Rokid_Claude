@@ -72,7 +72,7 @@ class HudState {
 }
 
 @Composable
-fun HudScreen(state: HudState, connStatus: String, s: Strings) {
+fun HudScreen(state: HudState, connStatus: String, s: Strings, connected: Boolean) {
     val listState = rememberLazyListState()
     var following by remember { mutableStateOf(true) }
 
@@ -136,7 +136,7 @@ fun HudScreen(state: HudState, connStatus: String, s: Strings) {
             }
             Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Text(state.statusline, style = meta.copy(color = Green), maxLines = 1, softWrap = false)
-                Text(s.hint, style = meta.copy(fontSize = 11.sp))
+                Text(if (connected) s.hint else s.offlineHint, style = meta.copy(fontSize = 11.sp))
             }
         }
 

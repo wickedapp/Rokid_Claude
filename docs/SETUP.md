@@ -89,11 +89,36 @@ reaches the tunnel with it can make Claude Code run commands. Never commit
 on-glasses permission confirmation for risky tools is your second line of
 defense.
 
+## Connecting the glasses to Wi-Fi / a phone hotspot
+
+The glasses have no keyboard, so you can't type a Wi-Fi password in their
+settings panel. Provision Wi-Fi once over USB with the helper script — it
+prompts for the SSID and password, runs `adb shell cmd wifi connect-network`,
+and scrubs the password from the device log afterwards:
+
+```bash
+./setup-wifi.command
+```
+
+The credentials are saved on the glasses, so the network auto-reconnects when in
+range later (e.g. when you're out of the house on your phone hotspot).
+
+**iPhone Personal Hotspot caveat:** an iPhone hotspot sleeps when no device is
+connected and won't accept the association. Open Settings → Personal Hotspot and
+**stay on that screen** while the glasses connect. Android phone hotspots don't
+have this issue.
+
+In the app, if you're disconnected you can also **single-tap** to open the
+system Wi-Fi panel, or say **"网络" / "wifi"** any time to open it.
+
 ## Voice commands
 
 - **Tap** — start talking / stop recording / interrupt a running task.
-- **Double-tap** — blank the screen (the task keeps running).
-- Say **"新会话"** to start a new session, **"退出"** to close the app.
-- Say **"切换模型"** to open the model picker (opus / sonnet / fable), then swipe
-  to choose and tap to confirm.
-- Spoken shortcuts are defined in `relay/dictionary.json` (edit it live).
+- **Double-tap** — blank the screen (the task keeps running); when **offline**,
+  double-tap exits the app and single-tap opens Wi-Fi settings.
+- Say **"新会话" / "new session"** to reset, **"退出" / "exit"** to close.
+- Say **"切换模型" / "switch model"** to open the model picker (opus / sonnet /
+  fable), then swipe to choose and tap to confirm.
+- Say **"网络" / "wifi"** to open the system Wi-Fi panel.
+- Language (UI + speech) is set by `lang` in `config.json` (`zh` or `en`).
+- Spoken shortcuts are defined in `relay/dictionary.<lang>.json` (edit live).
