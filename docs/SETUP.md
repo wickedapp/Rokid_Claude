@@ -149,6 +149,28 @@ then you can unplug and `adb install -r` / `adb push` wirelessly.
 > network; `adb disconnect <IP>:5555` when done. Non-technical users should still
 > use the QR provisioning path (no adb at all).
 
+## Watching the session on your Mac
+
+The relay serves a web client (the "Rokid HUD simulator") at its own URL. It
+connects to the **same relay** and receives the **same event stream** as the
+glasses, so opening it mirrors the HUD — and because it sends its last position
+on connect, the relay replays the **current run's history**, not just new
+output. You can also type prompts from the page.
+
+**Local mode:** run `./start.command`, then open **http://localhost:8787** in a
+Mac browser — you'll see (and can drive) the same session as the glasses.
+
+Two limitations to know:
+
+1. **Local (no-token) relay only.** The bundled page connects without a token,
+   so a token-protected remote relay (`start-remote.command`) rejects it (1008).
+   Viewing a remote session on the Mac would need adding token support to the
+   web client — not done yet.
+2. **Watching is fine; control collides.** When the glasses and the Mac page are
+   both connected, output streams to both, but permission prompts and usage
+   updates are sent only to the **most recently connected** client. Treat the Mac
+   page as read-only ride-along; don't drive from both at once.
+
 ## Voice commands
 
 - **Tap** — start talking / stop recording / interrupt a running task.
