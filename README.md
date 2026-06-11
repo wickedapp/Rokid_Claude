@@ -37,13 +37,16 @@ protocol over WebSocket so the core is client-agnostic. See
 
 ## Features
 
-- 🎙️ Voice → Claude Code, streamed to a green HUD
-- 🌐 Remote control from anywhere via an ngrok tunnel (token-authed)
+- 🎙️ Voice → Claude Code, streamed to a green HUD (tap to talk, tap to interrupt)
 - ✅ On-glasses permission confirmation for risky tool calls (gesture verdict)
 - 📊 Statusline: current model + session cost/tokens
 - 🗣️ Voice model switch (opus / sonnet / fable) via a picker
+- 🌍 Bilingual (Chinese / English): set via `lang`, or switch at runtime by voice ("切换语言 / switch language")
+- 📷 On-device QR provisioning — scan a Wi-Fi QR to join a network, or a config QR to set serverUrl/token (no cable, no typing)
+- 🛟 Offline self-rescue — when disconnected, single-tap opens the QR scanner
+- 🖥️ Mirror the live session on your Mac (local web client)
+- 🌐 Remote control from anywhere via an ngrok tunnel (token-authed)
 - 🔋 Screen-off power saving; editable command dictionary
-- 🌐 Bilingual (Chinese / English) — switch the whole app via `lang` in config
 
 ## Requirements
 

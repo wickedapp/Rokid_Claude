@@ -41,13 +41,17 @@ web page.
 - **`run-store.ts`** — the source of truth for a session: an append-only event
   log with sequence numbers, enabling a reconnecting client to replay only the
   events it missed.
-- **`transcribe.ts`** — calls `whisper-cli` (whisper.cpp) on a captured WAV. It
-  passes a Simplified-Chinese initial prompt so the model emits Simplified
-  consistently, which keeps voice command matching reliable.
+- **`transcribe.ts`** — calls `whisper-cli` (whisper.cpp) on a captured WAV in
+  the connection's language; in Chinese it passes a Simplified-Chinese initial
+  prompt so the model emits Simplified consistently, which keeps voice command
+  matching reliable.
+- **`i18n.ts`** — the per-connection language (zh/en): whisper language + prompt,
+  permission/cancel strings, and tool-verb labels. Set from the client `hello`
+  and updated live by `setLang`.
 - **`permission.ts` + `permission-hook.mjs`** — the PreToolUse permission flow
   (see Permissions below).
 - **`dictionary.ts`** — expands spoken shortcuts into longer prompts or slash
-  commands (`relay/dictionary.json`, editable live).
+  commands (`relay/dictionary.<lang>.json`, editable live).
 - **`model.ts`** — detects a "switch model" intent in a transcript and maps a
   model alias to a `claude --model` argument.
 - **`auth.ts`** — validates the `?token=` query parameter on the WebSocket
@@ -64,6 +68,12 @@ web page.
   voice-activity detection to auto-stop on silence.
 - **`Gestures` / `ChoiceState` / `RelayClient` / `Config`** — pure gesture
   mapping, choice-overlay state, the OkHttp WebSocket client, and config parsing.
+- **`ScannerActivity` + `WifiQr` / `ConfigQr`** — a CameraX + ZXing QR scanner
+  (reachable by single-tap when offline) that provisions Wi-Fi (`WIFI:` codes →
+  `ACTION_WIFI_ADD_NETWORKS`) or writes `config.json` (`RCLAUDE:` config codes →
+  serverUrl/token/lang, then reconnect). `WifiQr`/`ConfigQr` are pure parsers.
+- **`Strings.kt` / `Commands.kt`** — all HUD copy and spoken-command matchers in
+  zh/en, driven by `lang` and live-switchable by the "switch language" command.
 
 ## Data flow
 
@@ -82,7 +92,7 @@ A single voice command:
 
 | Direction | Messages |
 |---|---|
-| client → server | `hello`, `prompt`, `audio`, `stop`, `newSession`, `permissionDecision` |
+| client → server | `hello`, `prompt`, `audio`, `stop`, `newSession`, `permissionDecision`, `setLang` |
 | server → client | `sync`, `event`, `runEnd`, `transcript`, `usage`, `permissionRequest`, `modelRequest` |
 
 Reconnection is incremental: the client sends `hello { lastRunId, lastSeq }` and
