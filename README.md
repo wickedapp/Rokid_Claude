@@ -43,6 +43,7 @@ protocol over WebSocket so the core is client-agnostic. See
 - 📊 Statusline: current model + session cost/tokens
 - 🗣️ Voice model switch (opus / sonnet / fable) via a picker
 - 🔋 Screen-off power saving; editable command dictionary
+- 🌐 Bilingual (Chinese / English) — switch the whole app via `lang` in config
 
 ## Requirements
 

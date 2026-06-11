@@ -29,9 +29,9 @@ sealed interface ServerMessage {
     data class Event(val runId: String, val seq: Int, val event: AgentEvent) : ServerMessage
     data class RunEnd(val runId: String, val status: String) : ServerMessage
     data class Transcript(val text: String) : ServerMessage
-    data class PermissionRequest(val id: String, val summary: String, val options: List<String>, val allowKey: String) : ServerMessage
+    data class PermissionRequest(val id: String, val summary: String, val options: List<String>, val allowKey: String, val timeoutChoice: String) : ServerMessage
     data class Usage(val model: String?, val costUsd: Double, val tokens: Long) : ServerMessage
-    data class ModelRequest(val id: String, val options: List<String>, val current: Int) : ServerMessage
+    data class ModelRequest(val id: String, val options: List<String>, val current: Int, val timeoutChoice: String) : ServerMessage
     object Unknown : ServerMessage
 }
 
@@ -85,12 +85,12 @@ fun parseServerMessage(text: String): ServerMessage = try {
         "transcript" -> ServerMessage.Transcript(o.str("text") ?: "")
         "permissionRequest" -> {
             val opts = (o["options"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
-            ServerMessage.PermissionRequest(o.str("id") ?: "", o.str("summary") ?: "", opts, o.str("allowKey") ?: "")
+            ServerMessage.PermissionRequest(o.str("id") ?: "", o.str("summary") ?: "", opts, o.str("allowKey") ?: "", o.str("timeoutChoice") ?: (opts.lastOrNull() ?: ""))
         }
         "usage" -> ServerMessage.Usage(o.str("model"), o.dbl("costUsd") ?: 0.0, o.lng("tokens") ?: 0L)
         "modelRequest" -> {
             val opts = (o["options"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
-            ServerMessage.ModelRequest(o.str("id") ?: "", opts, o.int("current") ?: 0)
+            ServerMessage.ModelRequest(o.str("id") ?: "", opts, o.int("current") ?: 0, o.str("timeoutChoice") ?: (opts.lastOrNull() ?: ""))
         }
         else -> ServerMessage.Unknown
     }

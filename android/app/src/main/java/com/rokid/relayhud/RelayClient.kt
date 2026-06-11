@@ -12,9 +12,11 @@ import org.json.JSONObject
 /** OkHttp WebSocket 客户端:连接/自动重连,收发中继协议。回调在主线程。 */
 class RelayClient(
     private val url: String,
+    private val lang: String,
     private val onMessage: (ServerMessage) -> Unit,
     private val onStatus: (String) -> Unit,
 ) {
+    private val s = strings(lang)
     private val client = OkHttpClient()
     private val main = Handler(Looper.getMainLooper())
     private var ws: WebSocket? = null
@@ -26,19 +28,19 @@ class RelayClient(
             .build()
         ws = client.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                main.post { onStatus("已连接") }
-                webSocket.send("""{"type":"hello"}""")
+                main.post { onStatus(s.connected) }
+                webSocket.send("""{"type":"hello","lang":"$lang"}""")
             }
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val msg = parseServerMessage(text)
                 main.post { onMessage(msg) }
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                main.post { onStatus("断开,重连中…") }
+                main.post { onStatus(s.disconnected) }
                 scheduleReconnect()
             }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                main.post { onStatus("已关闭") }
+                main.post { onStatus(s.closed) }
                 scheduleReconnect()
             }
         })

@@ -29,7 +29,7 @@ const { http } = createRelayServer({
   stateDir: join(root, 'state'),
   modelPath: join(root, 'models', 'ggml-small.bin'),
   token,
-  dictionaryPath: join(root, 'dictionary.json'),
+  dictionaryDir: root,
   runner: (o) => runClaude({ ...o, settingsPath }),
 });
 

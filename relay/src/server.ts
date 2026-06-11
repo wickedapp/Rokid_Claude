@@ -10,9 +10,10 @@ import { checkToken } from './auth';
 import { decide, summarize } from './permission';
 import { expandPrompt, loadDictionary } from './dictionary';
 import { parseModelCommand, modelArg, type ModelAlias } from './model';
+import { tr, normalizeLang, type Lang } from './i18n';
 
 type RunnerFn = (opts: { prompt: string; cwd: string; sessionId?: string; model?: string }) => RunHandle;
-type TranscriberFn = (wavPath: string, modelPath: string) => Promise<string>;
+type TranscriberFn = (wavPath: string, modelPath: string, lang: Lang) => Promise<string>;
 
 export interface ServerOptions {
   sandboxDir: string;
@@ -20,7 +21,7 @@ export interface ServerOptions {
   stateDir: string;
   modelPath: string;
   token?: string;
-  dictionaryPath?: string;
+  dictionaryDir?: string;
   runner?: RunnerFn;
   transcriber?: TranscriberFn;
 }
@@ -42,6 +43,7 @@ export function createRelayServer(opts: ServerOptions) {
   const pending = new Map<string, (choice: string) => void>();
   let broadcast: ((msg: unknown) => void) | null = null;
 
+  let lang: Lang = 'zh';                      // 本连接语言(hello 时由客户端 config 传入)
   let currentModel: string | null = null;   // 最近一次 system 事件的真实模型(全 id)
   let selectedModel: ModelAlias | null = null;  // 用户语音选定的别名(opus/sonnet/fable),开跑前即显示
   let sessionCostUsd = 0;
@@ -57,14 +59,15 @@ export function createRelayServer(opts: ServerOptions) {
   /** 发 modelRequest,等用户在眼镜选,超时=取消。复用 pending(由 permissionDecision 兑现)。 */
   function requestModelChoice(current: ModelAlias | null, timeoutMs = 60000): Promise<string> {
     const id = `model-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const options = ['opus', 'sonnet', 'fable', '取消'];
+    const cancel = tr(lang).modelCancel;
+    const options = ['opus', 'sonnet', 'fable', cancel];
     const currentIdx = current ? options.indexOf(current) : 0;
     return new Promise((resolve) => {
       let done = false;
       const finish = (choice: string) => { if (done) return; done = true; pending.delete(id); resolve(choice); };
       pending.set(id, finish);
-      broadcast?.({ type: 'modelRequest', id, options, current: currentIdx < 0 ? 0 : currentIdx });
-      setTimeout(() => finish('取消'), timeoutMs);
+      broadcast?.({ type: 'modelRequest', id, options, current: currentIdx < 0 ? 0 : currentIdx, timeoutChoice: cancel });
+      setTimeout(() => finish(cancel), timeoutMs);
     });
   }
 
@@ -74,12 +77,14 @@ export function createRelayServer(opts: ServerOptions) {
     timeoutMs = 60000,
   ): Promise<string> {
     const id = `perm-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const t = tr(lang);
+    const options = [t.permOnce, t.permKind, t.permDeny];
     return new Promise((resolve) => {
       let done = false;
       const finish = (choice: string) => { if (done) return; done = true; pending.delete(id); resolve(choice); };
       pending.set(id, finish);
-      broadcast?.({ type: 'permissionRequest', id, tool: req.tool, summary: req.summary, options: ['允许一次', '这类都允许', '拒绝'], allowKey: req.allowKey ?? '' });
-      setTimeout(() => finish('拒绝'), timeoutMs);
+      broadcast?.({ type: 'permissionRequest', id, tool: req.tool, summary: req.summary, options, allowKey: req.allowKey ?? '', timeoutChoice: t.permDeny });
+      setTimeout(() => finish(t.permDeny), timeoutMs);
     });
   }
 
@@ -90,12 +95,13 @@ export function createRelayServer(opts: ServerOptions) {
       req.on('end', async () => {
         try {
           const { tool, input } = JSON.parse(body || '{}');
-          const { summary, command } = summarize(tool, input ?? {});
+          const { summary, command } = summarize(tool, input ?? {}, lang);
           // 记忆按"工具类型"(本会话):"这类都允许"后,同类工具(如所有 Write)免确认,利于批量。
           if (decide(tool, allowedSet) === 'allow') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ allow: true })); return; }
           const choice = await requestDecision({ tool, summary, command, allowKey: tool });
+          const t = tr(lang);
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ allow: choice === '允许一次' || choice === '这类都允许' }));
+          res.end(JSON.stringify({ allow: choice === t.permOnce || choice === t.permKind }));
         } catch { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ allow: false })); }
       });
       return;
@@ -140,7 +146,7 @@ export function createRelayServer(opts: ServerOptions) {
     const tmp = join(tmpdir(), `rokid-audio-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`);
     try {
       await writeFile(tmp, Buffer.from(wavBase64, 'base64'));
-      text = await transcriber(tmp, opts.modelPath);
+      text = await transcriber(tmp, opts.modelPath, lang);
     } catch { text = ''; }
     finally { await unlink(tmp).catch(() => {}); }
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'transcript', text }));
@@ -173,10 +179,11 @@ export function createRelayServer(opts: ServerOptions) {
     store.on('runEnd', onRunEnd);
 
     ws.on('message', (data) => {
-      let msg: { type?: string; prompt?: string; lastRunId?: string; lastSeq?: number; wav?: string; id?: string; choice?: string; allowKey?: string };
+      let msg: { type?: string; prompt?: string; lastRunId?: string; lastSeq?: number; wav?: string; id?: string; choice?: string; allowKey?: string; lang?: string };
       try { msg = JSON.parse(data.toString()); } catch { return; }
 
       if (msg.type === 'hello') {
+        lang = normalizeLang(msg.lang);
         const cur = store.getCurrent();
         ws.send(JSON.stringify({ type: 'sync', sessionId: cur.sessionId, currentRun: cur.currentRun }));
         ws.send(JSON.stringify(usageSnapshot()));
@@ -194,14 +201,15 @@ export function createRelayServer(opts: ServerOptions) {
         return;
       }
       if (msg.type === 'prompt' && msg.prompt) {
-        const cmd = parseModelCommand(msg.prompt);
+        const cmd = parseModelCommand(msg.prompt, lang);
         if (cmd?.kind === 'pick') {
           void requestModelChoice(selectedModel).then((choice) => {
             if (choice === 'opus' || choice === 'sonnet' || choice === 'fable') applyModel(choice);
           });
           return;
         }
-        const text = opts.dictionaryPath ? expandPrompt(msg.prompt, loadDictionary(opts.dictionaryPath)) : msg.prompt;
+        const dict = opts.dictionaryDir ? loadDictionary(join(opts.dictionaryDir, `dictionary.${lang}.json`)) : {};
+        const text = expandPrompt(msg.prompt, dict);
         void startRun(text);
         return;
       }
@@ -214,7 +222,7 @@ export function createRelayServer(opts: ServerOptions) {
         return;
       }
       if (msg.type === 'permissionDecision' && msg.id && typeof msg.choice === 'string') {
-        if (msg.choice === '这类都允许' && msg.allowKey) allowedSet.add(msg.allowKey);
+        if (msg.choice === tr(lang).permKind && msg.allowKey) allowedSet.add(msg.allowKey);
         pending.get(msg.id)?.(msg.choice);
         return;
       }

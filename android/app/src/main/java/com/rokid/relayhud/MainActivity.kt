@@ -17,25 +17,18 @@ class MainActivity : ComponentActivity() {
     private lateinit var client: RelayClient
     private lateinit var voice: VoiceInput
     private val hud = HudState()
-    private val conn = mutableStateOf("连接中…")
+    private val conn = mutableStateOf("")
     private val audioGranted = mutableStateOf(false)
     @Volatile private var recording = false
     @Volatile private var running = false
     private var choiceState: ChoiceState? = null
     private val countdown = Handler(Looper.getMainLooper())
     private var secondsLeft = 60
-    private var choiceTimeoutDefault = "拒绝"
+    private var choiceTimeoutDefault = ""
+    private var lang = "zh"
+    private lateinit var s: Strings
     private val requestAudio =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { audioGranted.value = it }
-
-    // 含 whisper 同音误识(会话/绘画/汇话 同音 huìhuà;对话/对画)
-    private val newSessionPhrases = setOf(
-        "新会话", "新对话", "开新对话", "新的对话", "开始新对话",
-        "新绘画", "新绘话", "新汇话", "新对画", "心会话",
-    )
-
-    // 含 whisper 同音(退/推 tuì)
-    private val exitPhrases = setOf("退出", "关闭", "退下", "推出", "退出程序", "关掉")
 
     /** 读 adb push 进来的外部配置文件;不存在/读失败则回退本地默认。 */
     private fun loadConfig(): AppConfig {
@@ -53,11 +46,17 @@ class MainActivity : ComponentActivity() {
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
         val cfg = loadConfig()
+        lang = cfg.lang
+        s = strings(lang)
+        conn.value = s.connecting
+        hud.status = s.ready
+        hud.statusline = statuslineText(null, 0.0, 0L, s)
         client = RelayClient(
             url = buildWsUrl(cfg.serverUrl, cfg.token),
+            lang = lang,
             onMessage = { msg ->
                 if (msg is ServerMessage.Usage) {
-                    hud.statusline = statuslineText(msg.model, msg.costUsd, msg.tokens)
+                    hud.statusline = statuslineText(msg.model, msg.costUsd, msg.tokens, s)
                 } else if (msg is ServerMessage.ModelRequest) {
                     enterModelChoice(msg)
                 } else if (msg is ServerMessage.PermissionRequest) {
@@ -65,19 +64,19 @@ class MainActivity : ComponentActivity() {
                 } else if (msg is ServerMessage.Transcript) {
                     val t = msg.text.trim().trim('。', '，', '!', '！', '.', ' ')
                     when {
-                        t.isEmpty() -> hud.status = "(没听到内容)"
-                        newSessionPhrases.contains(t) -> {
-                            client.newSession(); hud.clear(); hud.status = "🆕 新会话"
+                        t.isEmpty() -> hud.status = s.noSpeech
+                        matchesNewSession(msg.text, lang) -> {
+                            client.newSession(); hud.clear(); hud.status = s.newSessionMsg
                         }
-                        exitPhrases.contains(t) -> { hud.status = "👋 退出"; finish() }
+                        matchesExit(msg.text, lang) -> { hud.status = s.exitMsg; finish() }
                         else -> {
-                            hud.add("▶ $t", Color(0xFF00AA77)); hud.status = "提交中…"; running = true; refreshKeepOn()
+                            hud.add("▶ $t", Color(0xFF00AA77)); hud.status = s.submitting; running = true; refreshKeepOn()
                             client.sendPrompt(t)
                         }
                     }
                 } else {
                     if (msg is ServerMessage.RunEnd) { running = false; refreshKeepOn() }
-                    handle(msg, hud)
+                    handle(msg, hud, s)
                 }
             },
             onStatus = { conn.value = it },
@@ -86,13 +85,13 @@ class MainActivity : ComponentActivity() {
 
         voice = VoiceInput(
             context = this,
-            onAudio = { b64 -> recording = false; hud.recording = false; hud.status = "转写中…"; refreshKeepOn(); client.sendAudio(b64) },
+            onAudio = { b64 -> recording = false; hud.recording = false; hud.status = s.transcribing; refreshKeepOn(); client.sendAudio(b64) },
             onError = { recording = false; hud.recording = false; hud.status = it; refreshKeepOn() },
         )
 
         if (!audioGranted.value) requestAudio.launch(Manifest.permission.RECORD_AUDIO)
 
-        setContent { HudScreen(state = hud, connStatus = conn.value) }
+        setContent { HudScreen(state = hud, connStatus = conn.value, s = s) }
     }
 
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
@@ -127,8 +126,8 @@ class MainActivity : ComponentActivity() {
     /** 收到权限请求 → 进选择模式 + 启动 60s 倒计时(超时=拒绝)。 */
     private fun enterChoice(msg: ServerMessage.PermissionRequest) {
         choiceState = ChoiceState(msg.options)
-        choiceTimeoutDefault = "拒绝"
-        hud.choice = PermissionPrompt(msg.id, msg.summary, msg.options, msg.allowKey, 0, 60)
+        choiceTimeoutDefault = msg.timeoutChoice
+        hud.choice = PermissionPrompt(msg.id, msg.summary, msg.options, msg.allowKey, 0, 60, title = s.confirm)
         startCountdown()
     }
 
@@ -137,8 +136,8 @@ class MainActivity : ComponentActivity() {
         val cs = ChoiceState(msg.options)
         repeat(msg.current.coerceIn(0, msg.options.size - 1)) { cs.move(1) }
         choiceState = cs
-        choiceTimeoutDefault = "取消"
-        hud.choice = PermissionPrompt(msg.id, "切换模型", msg.options, "", cs.highlight, 60, title = "选择模型")
+        choiceTimeoutDefault = msg.timeoutChoice
+        hud.choice = PermissionPrompt(msg.id, "", msg.options, "", cs.highlight, 60, title = s.selectModel)
         startCountdown()
     }
 
@@ -194,12 +193,12 @@ class MainActivity : ComponentActivity() {
     private fun onTap() {
         when {
             recording -> { voice.stop(); recording = false /* onAudio 里会再确认 */ }
-            running -> { client.stop(); hud.status = "⏹ 已停止"; running = false }
+            running -> { client.stop(); hud.status = s.stopped; running = false }
             else -> {
                 if (audioGranted.value) {
-                    voice.start(); recording = true; hud.recording = true; hud.status = "🎤 录音中…"
+                    voice.start(); recording = true; hud.recording = true; hud.status = s.recordingStatus
                 } else {
-                    hud.status = "麦克风未授权"; requestAudio.launch(Manifest.permission.RECORD_AUDIO)
+                    hud.status = s.micUnauthorized; requestAudio.launch(Manifest.permission.RECORD_AUDIO)
                 }
             }
         }
@@ -214,13 +213,13 @@ class MainActivity : ComponentActivity() {
 }
 
 /** 把中继消息映射成 HUD 状态(对照 web/app.js)。Transcript 在 MainActivity onMessage 处理。 */
-fun handle(msg: ServerMessage, state: HudState) {
+fun handle(msg: ServerMessage, state: HudState, s: Strings) {
     when (msg) {
-        is ServerMessage.Sync -> msg.currentRun?.let { state.add("── 续接:${it.prompt} ──", Color(0xFF00AA77)) }
+        is ServerMessage.Sync -> msg.currentRun?.let { state.add("── ${s.resumePrefix}: ${it.prompt} ──", Color(0xFF00AA77)) }
         is ServerMessage.RunEnd -> state.status = when (msg.status) {
-            "interrupted" -> "⚠️ 已中断"; "error" -> "❌ 出错"; else -> "✅ 完成"
+            "interrupted" -> s.interrupted; "error" -> s.errored; else -> s.done
         }
-        is ServerMessage.Event -> renderEvent(msg.event, state)
+        is ServerMessage.Event -> renderEvent(msg.event, state, s)
         is ServerMessage.Transcript -> {}
         is ServerMessage.PermissionRequest -> {}  // 在 onMessage 上游处理(进选择模式)
         is ServerMessage.Usage -> {}
@@ -229,10 +228,10 @@ fun handle(msg: ServerMessage, state: HudState) {
     }
 }
 
-fun renderEvent(ev: AgentEvent, state: HudState) {
+fun renderEvent(ev: AgentEvent, state: HudState, s: Strings) {
     when (ev) {
-        is AgentEvent.System -> state.status = "🟢 已就绪 · 思考中…"
-        AgentEvent.Thinking -> state.status = "💭 思考中…"
+        is AgentEvent.System -> state.status = s.readyThinking
+        AgentEvent.Thinking -> state.status = s.thinking
         is AgentEvent.Text -> state.addText(ev.delta)
         is AgentEvent.ToolUse -> {
             val label = "⏳ ${ev.name}${if (ev.summary.isNotEmpty()) " — ${ev.summary}" else ""}"
@@ -245,8 +244,8 @@ fun renderEvent(ev: AgentEvent, state: HudState) {
             val old = state.lines[idx].text.removePrefix("⏳ ")
             state.lines[idx] = HudLine((if (ev.isError) "❌ " else "✅ ") + old)
         }
-        AgentEvent.Done -> state.status = "✅ 完成"
-        is AgentEvent.Error -> { state.add("错误: ${ev.message}", Color(0xFFFF5555)); state.status = "❌ 出错" }
+        AgentEvent.Done -> state.status = s.done
+        is AgentEvent.Error -> { state.add("${s.errorPrefix}${ev.message}", Color(0xFFFF5555)); state.status = s.errored }
         AgentEvent.Unknown -> {}
     }
 }

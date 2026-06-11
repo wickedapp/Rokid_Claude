@@ -177,10 +177,10 @@ describe('命令词典展开', () => {
     let seenPrompt = '';
     const srv = createRelayServer({
       sandboxDir: '/tmp/x', webDir: '/tmp/x', stateDir: dir, modelPath: '/tmp/m.bin',
-      dictionaryPath: dir + '/dict.json',
+      dictionaryDir: dir,
       runner: (o) => { seenPrompt = o.prompt; return { events: (async function* () {})(), stop() {} }; },
     });
-    writeFileSync(dir + '/dict.json', JSON.stringify({ '审查代码': '审查我的改动' }));
+    writeFileSync(dir + '/dictionary.zh.json', JSON.stringify({ '审查代码': '审查我的改动' }));
     await new Promise<void>((r) => srv.http.listen(0, r));
     close = () => srv.http.close();
     const port = (srv.http.address() as AddressInfo).port;
@@ -188,6 +188,50 @@ describe('命令词典展开', () => {
     await new Promise<void>((r) => ws.on('open', () => { ws.send('{"type":"hello"}'); ws.send(JSON.stringify({ type: 'prompt', prompt: '审查代码' })); r(); }));
     await new Promise((r) => setTimeout(r, 200));
     expect(seenPrompt).toBe('审查我的改动');
+    ws.close();
+  });
+});
+
+describe('双语', () => {
+  it('hello lang=en → 权限框英文选项 + timeoutChoice=Deny', async () => {
+    const srv = createRelayServer({
+      sandboxDir: '/tmp/x', webDir: '/tmp/x', stateDir: dir, modelPath: '/tmp/m.bin',
+      runner: fakeRunner([]),
+    });
+    await new Promise<void>((r) => srv.http.listen(0, r));
+    close = () => srv.http.close();
+    const port = (srv.http.address() as AddressInfo).port;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+    // 等 hello 被处理(relay 处理后会回一帧 usage 快照)再发起裁决,确保 lang 已置 en
+    await new Promise<void>((r) => {
+      ws.on('open', () => ws.send('{"type":"hello","lang":"en"}'));
+      ws.on('message', (d) => { if (JSON.parse(d.toString()).type === 'usage') r(); });
+    });
+    const req: any = await new Promise((r) => {
+      ws.on('message', (d) => { const m = JSON.parse(d.toString()); if (m.type === 'permissionRequest') r(m); });
+      srv.requestDecision({ tool: 'Bash', summary: 'Run: ls', command: 'ls', allowKey: 'Bash' });
+    });
+    expect(req.options).toEqual(['Allow once', 'Allow this kind', 'Deny']);
+    expect(req.timeoutChoice).toBe('Deny');
+    ws.close();
+  });
+
+  it('en:模型框选项含 Cancel + timeoutChoice=Cancel', async () => {
+    const srv = createRelayServer({
+      sandboxDir: '/tmp/x', webDir: '/tmp/x', stateDir: dir, modelPath: '/tmp/m.bin',
+      runner: () => ({ events: (async function* () {})(), stop() {} }),
+    });
+    await new Promise<void>((r) => srv.http.listen(0, r));
+    close = () => srv.http.close();
+    const port = (srv.http.address() as AddressInfo).port;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+    await new Promise<void>((r) => ws.on('open', () => { ws.send('{"type":"hello","lang":"en"}'); r(); }));
+    const req: any = await new Promise((r) => {
+      ws.on('message', (d) => { const m = JSON.parse(d.toString()); if (m.type === 'modelRequest') r(m); });
+      ws.send(JSON.stringify({ type: 'prompt', prompt: 'switch model' }));
+    });
+    expect(req.options).toEqual(['opus', 'sonnet', 'fable', 'Cancel']);
+    expect(req.timeoutChoice).toBe('Cancel');
     ws.close();
   });
 });

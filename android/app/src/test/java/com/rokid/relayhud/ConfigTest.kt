@@ -21,6 +21,14 @@ class ConfigTest {
         assertEquals(DEFAULT_CONFIG, parseConfig("not json {"))
     }
 
+    @Test fun parsesLang() {
+        assertEquals("en", parseConfig("""{"serverUrl":"ws://x","token":"","lang":"en"}""").lang)
+    }
+
+    @Test fun defaultsLangToZh() {
+        assertEquals("zh", parseConfig("""{"serverUrl":"ws://x","token":""}""").lang)
+    }
+
     @Test fun buildWsUrl_noToken_returnsHostUnchanged() {
         assertEquals("ws://localhost:8787", buildWsUrl("ws://localhost:8787", ""))
     }

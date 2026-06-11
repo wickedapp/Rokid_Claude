@@ -86,6 +86,20 @@ class ProtocolTest {
     }
 
     @Test
+    fun parsesPermissionTimeoutChoice() {
+        val msg = parseServerMessage("""{"type":"permissionRequest","id":"p1","summary":"Run: ls","options":["Allow once","Allow this kind","Deny"],"allowKey":"Bash","timeoutChoice":"Deny"}""")
+        assertTrue(msg is ServerMessage.PermissionRequest)
+        assertEquals("Deny", (msg as ServerMessage.PermissionRequest).timeoutChoice)
+    }
+
+    @Test
+    fun parsesModelTimeoutChoice() {
+        val msg = parseServerMessage("""{"type":"modelRequest","id":"m1","options":["opus","sonnet","fable","Cancel"],"current":0,"timeoutChoice":"Cancel"}""")
+        assertTrue(msg is ServerMessage.ModelRequest)
+        assertEquals("Cancel", (msg as ServerMessage.ModelRequest).timeoutChoice)
+    }
+
+    @Test
     fun parsesModelRequest() {
         val msg = parseServerMessage("""{"type":"modelRequest","id":"m1","options":["opus","sonnet","fable","取消"],"current":1}""")
         assertTrue(msg is ServerMessage.ModelRequest)

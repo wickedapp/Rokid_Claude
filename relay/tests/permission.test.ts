@@ -19,3 +19,14 @@ describe('permission 纯逻辑', () => {
     expect(summarize('Glob', {})).toEqual({ summary: 'Glob', command: 'Glob' });
   });
 });
+
+describe('summarize lang', () => {
+  it('zh 动词', () => {
+    expect(summarize('Bash', { command: 'ls' }, 'zh').summary).toBe('运行: ls');
+    expect(summarize('Write', { file_path: 'a.txt' }, 'zh').summary).toBe('写: a.txt');
+  });
+  it('en 动词', () => {
+    expect(summarize('Bash', { command: 'ls' }, 'en').summary).toBe('Run: ls');
+    expect(summarize('Write', { file_path: 'a.txt' }, 'en').summary).toBe('Write: a.txt');
+  });
+});

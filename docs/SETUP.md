@@ -40,6 +40,8 @@ ngrok tunnel.
    - Or over USB only: run `adb reverse tcp:8787 tcp:8787` and use
      `"serverUrl": "ws://localhost:8787"`.
    - Leave `"token": ""` for local (no auth).
+   - `"lang": "zh"` or `"en"` sets the whole app language — UI, speech
+     recognition, voice commands, and dictionary. Default is `zh`.
 
    Push it to the app's external files directory:
    ```bash

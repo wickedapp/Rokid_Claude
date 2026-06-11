@@ -25,6 +25,21 @@ describe('parseModelCommand', () => {
   });
 });
 
+describe('parseModelCommand en', () => {
+  it('英文切模型意图 → pick', () => {
+    expect(parseModelCommand('switch model', 'en')).toEqual({ kind: 'pick' });
+    expect(parseModelCommand('change the model', 'en')).toEqual({ kind: 'pick' });
+    expect(parseModelCommand('select model', 'en')).toEqual({ kind: 'pick' });
+  });
+  it('含 model 但无切换动词 → null', () => {
+    expect(parseModelCommand('what model is this', 'en')).toBeNull();
+    expect(parseModelCommand('use opus to write an essay', 'en')).toBeNull();
+  });
+  it('普通英文 prompt → null', () => {
+    expect(parseModelCommand('run the tests', 'en')).toBeNull();
+  });
+});
+
 describe('modelArg', () => {
   it('opus/sonnet 用别名,fable 用全 id', () => {
     expect(modelArg('opus' as ModelAlias)).toBe('opus');

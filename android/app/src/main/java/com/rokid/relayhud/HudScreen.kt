@@ -37,12 +37,12 @@ data class PermissionPrompt(
 
 class HudState {
     val lines = mutableStateListOf<HudLine>()
-    var status by mutableStateOf("就绪")
+    var status by mutableStateOf("")              // 由 MainActivity 用 Strings 初始化
     val toolIndex = mutableMapOf<String, Int>()
     var recording by mutableStateOf(false)
     var choice by mutableStateOf<PermissionPrompt?>(null)
     var blanked by mutableStateOf(false)
-    var statusline by mutableStateOf(statuslineText(null, 0.0, 0L))
+    var statusline by mutableStateOf("")          // 由 MainActivity 用 Strings 初始化
     var scrollTick by mutableStateOf(0)
         private set
     var scrollDir = 0
@@ -72,7 +72,7 @@ class HudState {
 }
 
 @Composable
-fun HudScreen(state: HudState, connStatus: String) {
+fun HudScreen(state: HudState, connStatus: String, s: Strings) {
     val listState = rememberLazyListState()
     var following by remember { mutableStateOf(true) }
 
@@ -124,7 +124,7 @@ fun HudScreen(state: HudState, connStatus: String) {
                 Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(state.status, style = meta)
-                        if (state.recording) Text("● 录音中…", style = body.copy(fontSize = 12.sp))
+                        if (state.recording) Text(s.recordingDot, style = body.copy(fontSize = 12.sp))
                     }
                     LazyColumn(
                         state = listState,
@@ -135,8 +135,8 @@ fun HudScreen(state: HudState, connStatus: String) {
                 }
             }
             Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Text(state.statusline, style = meta.copy(color = Green))
-                Text("单击说话/停止 · 双击退 · 滑动翻", style = meta)
+                Text(state.statusline, style = meta.copy(color = Green), maxLines = 1, softWrap = false)
+                Text(s.hint, style = meta.copy(fontSize = 11.sp))
             }
         }
 
@@ -156,7 +156,7 @@ fun HudScreen(state: HudState, connStatus: String) {
                             style = body.copy(color = if (sel) Green else DimGreen),
                         )
                     }
-                    Text("前/后滑选 · 单击定", style = meta, modifier = Modifier.padding(top = 6.dp))
+                    Text(s.choiceHint, style = meta, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }
@@ -168,15 +168,15 @@ fun HudScreen(state: HudState, connStatus: String) {
 }
 
 /** 模型 id 或别名 → 短名;组装 statusline 文本。tokens 以 k 显示。 */
-fun shortModel(model: String?): String = when {
-    model == null -> "模型未知"
+fun shortModel(model: String?, s: Strings): String = when {
+    model == null -> s.modelUnknown
     model.contains("opus", true) -> "opus"
     model.contains("sonnet", true) -> "sonnet"
     model.contains("fable", true) -> "fable"
     else -> model
 }
-fun statuslineText(model: String?, costUsd: Double, tokens: Long): String {
+fun statuslineText(model: String?, costUsd: Double, tokens: Long, s: Strings): String {
     val cost = String.format("$%.2f", costUsd)
     val tok = if (tokens >= 1000) "${tokens / 1000}k tok" else "$tokens tok"
-    return "${shortModel(model)} · 会话 $cost · $tok"
+    return "${shortModel(model, s)} · ${s.sessionLabel} $cost · $tok"
 }

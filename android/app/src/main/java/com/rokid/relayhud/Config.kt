@@ -6,10 +6,10 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
-/** 眼镜 app 的连接配置。token 为空=本地直连不鉴权。 */
-data class AppConfig(val serverUrl: String, val token: String)
+/** 眼镜 app 的连接配置。token 为空=本地直连不鉴权;lang=zh|en 决定全 app 语言。 */
+data class AppConfig(val serverUrl: String, val token: String, val lang: String = "zh")
 
-val DEFAULT_CONFIG = AppConfig(serverUrl = "ws://localhost:8787", token = "")
+val DEFAULT_CONFIG = AppConfig(serverUrl = "ws://localhost:8787", token = "", lang = "zh")
 
 /** 解析 adb 推来的 config.json;为空/非法时回退本地默认。 */
 fun parseConfig(json: String?): AppConfig {
@@ -19,7 +19,8 @@ fun parseConfig(json: String?): AppConfig {
         val url = o["serverUrl"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             ?: DEFAULT_CONFIG.serverUrl
         val tok = o["token"]?.jsonPrimitive?.contentOrNull ?: ""
-        AppConfig(url, tok)
+        val lang = if (o["lang"]?.jsonPrimitive?.contentOrNull == "en") "en" else "zh"
+        AppConfig(url, tok, lang)
     } catch (_: Exception) {
         DEFAULT_CONFIG
     }
