@@ -221,6 +221,10 @@ export function createRelayServer(opts: ServerOptions) {
         broadcastUsage();
         return;
       }
+      if (msg.type === 'setLang' && typeof msg.lang === 'string') {
+        lang = normalizeLang(msg.lang);
+        return;
+      }
       if (msg.type === 'permissionDecision' && msg.id && typeof msg.choice === 'string') {
         if (msg.choice === tr(lang).permKind && msg.allowKey) allowedSet.add(msg.allowKey);
         pending.get(msg.id)?.(msg.choice);

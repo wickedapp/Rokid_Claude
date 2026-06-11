@@ -30,8 +30,9 @@ class MainActivity : ComponentActivity() {
     private val countdown = Handler(Looper.getMainLooper())
     private var secondsLeft = 60
     private var choiceTimeoutDefault = ""
-    private var lang = "zh"
-    private lateinit var s: Strings
+    private var lang = "zh"                       // 命令式逻辑读(matchers / client)
+    private val sState = mutableStateOf(strings("zh"))  // 驱动 UI 热重绘(mutableStateOf 已 import)
+    private val s get() = sState.value            // 现有所有 s.xxx 读法不变
     private val requestAudio =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { audioGranted.value = it }
 
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity() {
         tryEnableWifi()
         val cfg = loadConfig()
         lang = cfg.lang
-        s = strings(lang)
+        sState.value = strings(lang)
         conn.value = s.connecting
         hud.status = s.ready
         hud.statusline = statuslineText(null, 0.0, 0L, s)
@@ -94,6 +95,7 @@ class MainActivity : ComponentActivity() {
                         }
                         matchesExit(msg.text, lang) -> { hud.status = s.exitMsg; finish() }
                         matchesWifi(msg.text, lang) -> openWifiSettings()
+                        matchesLangSwitch(msg.text) -> switchLang(if (lang == "zh") "en" else "zh")
                         else -> {
                             hud.add("▶ $t", Color(0xFF00AA77)); hud.status = s.submitting; running = true; refreshKeepOn()
                             client.sendPrompt(t)
@@ -234,6 +236,16 @@ class MainActivity : ComponentActivity() {
             }
         }
         refreshKeepOn()
+    }
+
+    /** 直接 toggle 中英:本端热重绘 + 通知 relay + 用新语言提示。仅本次会话有效。 */
+    private fun switchLang(newLang: String) {
+        if (newLang == lang) return
+        lang = newLang
+        sState.value = strings(newLang)                 // UI 热重绘
+        client.setLang(newLang)                         // relay 跟随(whisper/字典/权限)
+        conn.value = if (connected.value) s.connected else s.disconnected  // 页脚即时换语言
+        hud.status = s.langSwitched                     // 用新语言显示
     }
 
     override fun onDestroy() {

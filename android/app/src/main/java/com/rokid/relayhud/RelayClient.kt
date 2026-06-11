@@ -12,11 +12,12 @@ import org.json.JSONObject
 /** OkHttp WebSocket 客户端:连接/自动重连,收发中继协议。回调在主线程。 */
 class RelayClient(
     private val url: String,
-    private val lang: String,
+    lang: String,
     private val onMessage: (ServerMessage) -> Unit,
     private val onStatus: (String, Boolean) -> Unit,
 ) {
-    private val s = strings(lang)
+    private var lang = lang                   // 可变:setLang 更新,重连 hello 用最新值
+    private val s get() = strings(this.lang)  // 随 lang 走,断线重连用切换后语言的状态文案
     private val client = OkHttpClient()
     private val main = Handler(Looper.getMainLooper())
     private var ws: WebSocket? = null
@@ -63,6 +64,10 @@ class RelayClient(
     }
     fun stop() = send("""{"type":"stop"}""")
     fun newSession() = send("""{"type":"newSession"}""")
+    fun setLang(newLang: String) {
+        lang = newLang
+        send(JSONObject().put("type", "setLang").put("lang", newLang).toString())
+    }
     fun sendDecision(id: String, choice: String, allowKey: String) {
         send(JSONObject().put("type", "permissionDecision").put("id", id).put("choice", choice).put("allowKey", allowKey).toString())
     }

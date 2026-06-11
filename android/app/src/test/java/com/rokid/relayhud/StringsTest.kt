@@ -33,4 +33,22 @@ class StringsTest {
         assertEquals("tap: open WiFi · double-tap: exit", strings("en").offlineHint)
         assertEquals("单击:打开WiFi · 双击:退出", strings("zh").offlineHint)
     }
+    @Test fun langSwitchedShownInTargetLang() {
+        assertEquals("🌐 已切换为中文", strings("zh").langSwitched)
+        assertEquals("🌐 Switched to English", strings("en").langSwitched)
+    }
+    @Test fun langSwitchMatchesBothLanguages() {
+        assertTrue(matchesLangSwitch("切换语言"))
+        assertTrue(matchesLangSwitch("切语言"))
+        assertTrue(matchesLangSwitch("中英切换"))
+        assertTrue(matchesLangSwitch("switch language"))
+        assertTrue(matchesLangSwitch("change language"))
+        assertTrue(matchesLangSwitch("toggle language"))
+        assertTrue(matchesLangSwitch("Switch Language."))
+    }
+    @Test fun langSwitchDoesNotMatchTaskSentences() {
+        assertTrue(!matchesLangSwitch("把这段代码的语言换成 Python"))
+        assertTrue(!matchesLangSwitch("switch the language of this file to rust"))
+        assertTrue(!matchesLangSwitch("hello"))
+    }
 }

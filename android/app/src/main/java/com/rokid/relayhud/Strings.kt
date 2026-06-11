@@ -30,6 +30,7 @@ data class Strings(
     val thinking: String,
     val errorPrefix: String,
     val offlineHint: String,
+    val langSwitched: String,
 )
 
 private val ZH = Strings(
@@ -42,6 +43,7 @@ private val ZH = Strings(
     resumePrefix = "续接", interrupted = "⚠️ 已中断", errored = "❌ 出错", done = "✅ 完成",
     readyThinking = "🟢 已就绪 · 思考中…", thinking = "💭 思考中…", errorPrefix = "错误: ",
     offlineHint = "单击:打开WiFi · 双击:退出",
+    langSwitched = "🌐 已切换为中文",
 )
 
 private val EN = Strings(
@@ -54,6 +56,7 @@ private val EN = Strings(
     resumePrefix = "resuming", interrupted = "⚠️ Interrupted", errored = "❌ Error", done = "✅ Done",
     readyThinking = "🟢 Ready · thinking…", thinking = "💭 Thinking…", errorPrefix = "Error: ",
     offlineHint = "tap: open WiFi · double-tap: exit",
+    langSwitched = "🌐 Switched to English",
 )
 
 fun strings(lang: String): Strings = if (lang == "en") EN else ZH

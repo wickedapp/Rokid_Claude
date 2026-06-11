@@ -120,5 +120,10 @@ system Wi-Fi panel, or say **"网络" / "wifi"** any time to open it.
 - Say **"切换模型" / "switch model"** to open the model picker (opus / sonnet /
   fable), then swipe to choose and tap to confirm.
 - Say **"网络" / "wifi"** to open the system Wi-Fi panel.
-- Language (UI + speech) is set by `lang` in `config.json` (`zh` or `en`).
+- Say **"切换语言" / "switch language"** to toggle the interface language (UI +
+  speech recognition + replies) between `zh` and `en` for the current session.
+  The trigger is recognized in either language, so you can switch even when
+  you're stuck in one you don't speak. It resets to `config.json`'s `lang` on
+  restart (not persisted).
+- Language (UI + speech) starts from `lang` in `config.json` (`zh` or `en`).
 - Spoken shortcuts are defined in `relay/dictionary.<lang>.json` (edit live).

@@ -11,6 +11,12 @@ private val EXIT_EN = setOf("exit", "quit", "close", "exit app", "quit app")
 // 打开系统 WiFi 面板的口令(随时可用的 WiFi 入口,含 whisper 常见变体)
 private val WIFI_ZH = setOf("网络", "无线网", "wifi", "wi-fi", "网路", "连网", "wifi设置", "打开wifi", "无线网络")
 private val WIFI_EN = setOf("wifi", "wi-fi", "wifi settings", "network", "open wifi", "wi fi")
+// 切换界面语言的口令:中英合一、语言无关(最需切换者正被困在另一种语言里)。
+// 整句精确匹配避免「把代码语言换成 Python」这类误触;真机上把听错的变体往里补。
+private val LANG_SWITCH = setOf(
+    "切换语言", "切语言", "换语言", "换个语言", "语言切换", "切换中英文", "中英切换",
+    "switch language", "change language", "switch lang", "toggle language", "language switch",
+)
 
 private fun norm(t: String) = t.trim().trim('。', '，', '!', '！', '.', ' ').lowercase()
 
@@ -22,3 +28,5 @@ fun matchesExit(text: String, lang: String): Boolean =
 
 fun matchesWifi(text: String, lang: String): Boolean =
     (if (lang == "en") WIFI_EN else WIFI_ZH).contains(norm(text))
+
+fun matchesLangSwitch(text: String): Boolean = LANG_SWITCH.contains(norm(text))
