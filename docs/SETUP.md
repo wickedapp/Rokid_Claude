@@ -137,6 +137,18 @@ natively.
 
 Say **"网络" / "wifi"** any time (when connected) to open the system Wi-Fi panel.
 
+## Wireless adb (optional, owner convenience)
+
+Once the glasses are on the same Wi-Fi LAN as your Mac, you can install APKs and
+push config over Wi-Fi instead of the cable. Plug in **once** and run
+`./wireless-adb.command` — it runs `adb tcpip 5555` and `adb connect <glasses-IP>:5555`,
+then you can unplug and `adb install -r` / `adb push` wirelessly.
+
+> tcpip mode is lost when the glasses reboot — re-run the script (plug in once).
+> Port 5555 is unauthenticated on the LAN, so only use this on a trusted home
+> network; `adb disconnect <IP>:5555` when done. Non-technical users should still
+> use the QR provisioning path (no adb at all).
+
 ## Voice commands
 
 - **Tap** — start talking / stop recording / interrupt a running task.
