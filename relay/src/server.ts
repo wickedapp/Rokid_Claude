@@ -41,7 +41,8 @@ export function createRelayServer(opts: ServerOptions) {
 
   const allowedSet = new Set<string>();
   const pending = new Map<string, (choice: string) => void>();
-  let broadcast: ((msg: unknown) => void) | null = null;
+  const clients = new Set<(msg: unknown) => void>();
+  const broadcast = (msg: unknown) => { for (const send of clients) send(msg); };
 
   let lang: Lang = 'zh';                      // 本连接语言(hello 时由客户端 config 传入)
   let currentModel: string | null = null;   // 最近一次 system 事件的真实模型(全 id)
@@ -52,7 +53,7 @@ export function createRelayServer(opts: ServerOptions) {
   function usageSnapshot() {
     return { type: 'usage', model: selectedModel ?? currentModel, costUsd: sessionCostUsd, tokens: sessionTokens };
   }
-  function broadcastUsage() { broadcast?.(usageSnapshot()); }
+  function broadcastUsage() { broadcast(usageSnapshot()); }
 
   function applyModel(model: ModelAlias) { selectedModel = model; broadcastUsage(); }
 
@@ -66,7 +67,7 @@ export function createRelayServer(opts: ServerOptions) {
       let done = false;
       const finish = (choice: string) => { if (done) return; done = true; pending.delete(id); resolve(choice); };
       pending.set(id, finish);
-      broadcast?.({ type: 'modelRequest', id, options, current: currentIdx < 0 ? 0 : currentIdx, timeoutChoice: cancel });
+      broadcast({ type: 'modelRequest', id, options, current: currentIdx < 0 ? 0 : currentIdx, timeoutChoice: cancel });
       setTimeout(() => finish(cancel), timeoutMs);
     });
   }
@@ -83,7 +84,7 @@ export function createRelayServer(opts: ServerOptions) {
       let done = false;
       const finish = (choice: string) => { if (done) return; done = true; pending.delete(id); resolve(choice); };
       pending.set(id, finish);
-      broadcast?.({ type: 'permissionRequest', id, tool: req.tool, summary: req.summary, options, allowKey: req.allowKey ?? '', timeoutChoice: t.permDeny });
+      broadcast({ type: 'permissionRequest', id, tool: req.tool, summary: req.summary, options, allowKey: req.allowKey ?? '', timeoutChoice: t.permDeny });
       setTimeout(() => finish(t.permDeny), timeoutMs);
     });
   }
@@ -155,7 +156,8 @@ export function createRelayServer(opts: ServerOptions) {
   const wss = new WebSocketServer({ server: http });
   wss.on('connection', (ws, req) => {
     if (!checkToken(req.url, opts.token)) { ws.close(1008, 'unauthorized'); return; }
-    broadcast = (msg) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
+    const send = (msg: unknown) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
+    clients.add(send);
     const sentMax = new Map<string, number>();
     let live = false;
     const queue: Array<['event', { runId: string; seq: number; event: unknown }] | ['end', { runId: string; status: string }]> = [];
@@ -232,7 +234,7 @@ export function createRelayServer(opts: ServerOptions) {
       }
     });
 
-    ws.on('close', () => { store.off('event', onEvent); store.off('runEnd', onRunEnd); broadcast = null; });
+    ws.on('close', () => { store.off('event', onEvent); store.off('runEnd', onRunEnd); clients.delete(send); });
   });
 
   return { http, wss, store, requestDecision, allowedSet };

@@ -61,3 +61,37 @@ describe('setLang', () => {
     await new Promise<void>((r) => srv.http.close(() => r()));
   });
 });
+
+describe('broadcast fan-out', () => {
+  it('sends permissionRequest to all connected clients, any one can answer', async () => {
+    const { srv } = makeServer();
+    await new Promise<void>((r) => srv.http.listen(0, r));
+    const port = (srv.http.address() as any).port;
+    const wsA = await connect(port);
+    const wsB = await connect(port);
+    wsA.send(JSON.stringify({ type: 'hello', lang: 'zh' }));
+    wsB.send(JSON.stringify({ type: 'hello', lang: 'zh' }));
+    await new Promise((r) => setTimeout(r, 50));
+
+    const gotA = waitFor(wsA, 'permissionRequest');
+    const gotB = waitFor(wsB, 'permissionRequest');
+
+    // 触发权限请求(/permission 会等裁决后才响应,所以先别 await)
+    const resP = fetch(`http://localhost:${port}/permission`, {
+      method: 'POST',
+      body: JSON.stringify({ tool: 'Bash', input: { command: 'ls' } }),
+    });
+
+    const [reqA, reqB] = await Promise.all([gotA, gotB]);
+    expect(reqA.id).toBe(reqB.id);   // 同一请求扇出给两端
+
+    // 任一客户端回裁决即兑现
+    wsA.send(JSON.stringify({ type: 'permissionDecision', id: reqA.id, choice: '允许一次', allowKey: 'Bash' }));
+    const body = await (await resP).json();
+    expect(body.allow).toBe(true);
+
+    wsA.close();
+    wsB.close();
+    await new Promise<void>((r) => srv.http.close(() => r()));
+  });
+});

@@ -1,7 +1,7 @@
 import { cleanTranscript } from './transcript.js';
 
 const $ = (id) => document.getElementById(id);
-const panel = $('panel'), content = $('content'), status = $('status'), conn = $('conn');
+const panel = $('panel'), content = $('content'), status = $('status'), conn = $('conn'), usage = $('usage');
 
 const LS = 'rokid-relay-pos';
 let pos = (() => { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch { return {}; } })();
@@ -75,6 +75,21 @@ function handle(msg) {
   if (msg.type === 'runEnd') {
     if (msg.status === 'interrupted') { addLine('⚠️ 上轮被中断,可发新指令续', 'err'); status.textContent = '⚠️ 已中断'; }
     else status.textContent = msg.status === 'error' ? '❌ 出错' : '✅ 完成';
+    return;
+  }
+  if (msg.type === 'usage') {
+    const model = msg.model || '—';
+    const cost = typeof msg.costUsd === 'number' ? msg.costUsd.toFixed(4) : '0.0000';
+    const tok = msg.tokens || 0;
+    usage.textContent = `${model} · $${cost} · ${tok}tok`;
+    return;
+  }
+  if (msg.type === 'permissionRequest') {
+    addLine(`🔐 权限请求:${msg.summary || msg.tool}(请在眼镜上确认)`, 'think');
+    return;
+  }
+  if (msg.type === 'modelRequest') {
+    addLine('🔀 模型选择(请在眼镜上选)', 'think');
     return;
   }
 }
