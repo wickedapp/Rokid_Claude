@@ -4,6 +4,11 @@
 # 用法:眼镜用开发线插到 Mac,双击本文件(或终端 ./setup-wifi.command)。
 cd "$(dirname "$0")"
 ADB="$HOME/Library/Android/sdk/platform-tools/adb"
+[ -x "$ADB" ] || ADB="$(command -v adb || true)"
+if [ -z "$ADB" ] || [ ! -x "$ADB" ]; then
+  echo "✗ 找不到 adb。请装 Android 平台工具(Android Studio 自带,或 brew install android-platform-tools)。"
+  read -n 1 -s -r -p "按任意键关闭…"; exit 1
+fi
 
 echo "──────────────────────────────"
 echo "  Rokid Claude · 眼镜配网"

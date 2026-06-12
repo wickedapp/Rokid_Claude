@@ -5,6 +5,11 @@
 # 注意:眼镜【重启后】tcpip 模式会丢,重插线再跑一次即可。
 cd "$(dirname "$0")"
 ADB="$HOME/Library/Android/sdk/platform-tools/adb"
+[ -x "$ADB" ] || ADB="$(command -v adb || true)"
+if [ -z "$ADB" ] || [ ! -x "$ADB" ]; then
+  echo "✗ 找不到 adb。请装 Android 平台工具(Android Studio 自带,或 brew install android-platform-tools)。"
+  read -n 1 -s -r -p "按任意键关闭…"; exit 1
+fi
 PORT=5555
 
 echo "──────────────────────────────"

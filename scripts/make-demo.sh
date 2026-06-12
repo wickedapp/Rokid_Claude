@@ -46,6 +46,8 @@ ffmpeg -hide_banner -loglevel error -y ${CLIP[@]+"${CLIP[@]}"} -i "$IN" -i "$PAL
 
 SIZE=$(du -h "$OUT" | awk '{print $1}')
 echo "✓ 生成:$OUT($SIZE,${WIDTH}px/${FPS}fps)"
-[ "${SIZE%[KM]}" ] && case "$SIZE" in
-  *M) MB=${SIZE%M}; awk "BEGIN{exit !($MB>10)}" && echo "  ⚠️ >10MB,GitHub 嵌入偏大——可调小 宽度/fps/时长 重生成。" ;;
+case "$SIZE" in
+  *G) echo "  ⚠️ 体积过大,GitHub 嵌入会很慢——调小 宽度/fps/时长 重生成。" ;;
+  *M) awk "BEGIN{exit !(${SIZE%M}>10)}" && echo "  ⚠️ >10MB,GitHub 嵌入偏大——可调小 宽度/fps/时长 重生成。" ;;
 esac
+echo "  嵌 README:![demo]($OUT)"
