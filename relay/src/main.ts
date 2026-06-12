@@ -15,6 +15,8 @@ const token = process.env.ROKID_TOKEN;
 const hookScript = join(__dirname, 'permission-hook.mjs');
 const settingsPath = join(tmpdir(), 'rokid-perm-settings.json');
 writeFileSync(settingsPath, JSON.stringify({
+  // 只读类联网工具静默放行(改不了 Mac,headless 下也不该卡确认)。
+  permissions: { allow: ['WebSearch', 'WebFetch'] },
   hooks: {
     PreToolUse: [{
       matcher: 'Bash|Write|Edit|MultiEdit|NotebookEdit',
