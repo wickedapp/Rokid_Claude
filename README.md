@@ -18,7 +18,7 @@ anywhere.
 
 ## Demo
 
-**Voice model switch** — say "switch model", then swipe to pick (opus / sonnet / haiku):
+**Voice model switch** — say "switch model", then swipe to pick a model:
 
 https://github.com/user-attachments/assets/d71357c8-0366-484c-aaa1-5de33ca66485
 
