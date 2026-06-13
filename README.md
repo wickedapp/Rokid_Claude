@@ -18,7 +18,7 @@ anywhere.
 
 ## Demo
 
-**Voice model switch** — say "switch model", then swipe to pick (opus / sonnet / fable):
+**Voice model switch** — say "switch model", then swipe to pick (opus / sonnet / haiku):
 
 https://github.com/user-attachments/assets/d71357c8-0366-484c-aaa1-5de33ca66485
 
@@ -47,7 +47,7 @@ protocol over WebSocket so the core is client-agnostic. See
 - 🎙️ Voice → Claude Code, streamed to a green HUD (tap to talk, tap to interrupt)
 - ✅ On-glasses permission confirmation for risky tool calls (gesture verdict)
 - 📊 Statusline: current model + session cost/tokens
-- 🗣️ Voice model switch (opus / sonnet / fable) via a picker
+- 🗣️ Voice model switch (opus / sonnet / haiku) via a picker
 - 🌍 Bilingual (Chinese / English): set via `lang`, or switch at runtime by voice ("切换语言 / switch language")
 - 📷 On-device QR provisioning — scan a Wi-Fi QR to join a network, or a config QR to set serverUrl/token (no cable, no typing)
 - 🛟 Offline self-rescue — when disconnected, single-tap opens the QR scanner

@@ -172,7 +172,7 @@ fun shortModel(model: String?, s: Strings): String = when {
     model == null -> s.modelUnknown
     model.contains("opus", true) -> "opus"
     model.contains("sonnet", true) -> "sonnet"
-    model.contains("fable", true) -> "fable"
+    model.contains("haiku", true) -> "haiku"
     else -> model
 }
 fun statuslineText(model: String?, costUsd: Double, tokens: Long, s: Strings): String {

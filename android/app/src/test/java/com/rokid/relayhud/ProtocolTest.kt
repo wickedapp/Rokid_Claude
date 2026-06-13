@@ -94,18 +94,18 @@ class ProtocolTest {
 
     @Test
     fun parsesModelTimeoutChoice() {
-        val msg = parseServerMessage("""{"type":"modelRequest","id":"m1","options":["opus","sonnet","fable","Cancel"],"current":0,"timeoutChoice":"Cancel"}""")
+        val msg = parseServerMessage("""{"type":"modelRequest","id":"m1","options":["opus","sonnet","haiku","Cancel"],"current":0,"timeoutChoice":"Cancel"}""")
         assertTrue(msg is ServerMessage.ModelRequest)
         assertEquals("Cancel", (msg as ServerMessage.ModelRequest).timeoutChoice)
     }
 
     @Test
     fun parsesModelRequest() {
-        val msg = parseServerMessage("""{"type":"modelRequest","id":"m1","options":["opus","sonnet","fable","取消"],"current":1}""")
+        val msg = parseServerMessage("""{"type":"modelRequest","id":"m1","options":["opus","sonnet","haiku","取消"],"current":1}""")
         assertTrue(msg is ServerMessage.ModelRequest)
         msg as ServerMessage.ModelRequest
         assertEquals("m1", msg.id)
-        assertEquals(listOf("opus","sonnet","fable","取消"), msg.options)
+        assertEquals(listOf("opus","sonnet","haiku","取消"), msg.options)
         assertEquals(1, msg.current)
     }
 }

@@ -230,7 +230,7 @@ describe('双语', () => {
       ws.on('message', (d) => { const m = JSON.parse(d.toString()); if (m.type === 'modelRequest') r(m); });
       ws.send(JSON.stringify({ type: 'prompt', prompt: 'switch model' }));
     });
-    expect(req.options).toEqual(['opus', 'sonnet', 'fable', 'Cancel']);
+    expect(req.options).toEqual(['opus', 'sonnet', 'haiku', 'Cancel']);
     expect(req.timeoutChoice).toBe('Cancel');
     ws.close();
   });
@@ -276,24 +276,24 @@ describe('语音切模型拦截', () => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
     await new Promise<void>((r) => ws.on('open', () => { ws.send('{"type":"hello"}'); r(); }));
 
-    // 「切换模型」→ 选择框 → 选 fable
+    // 「切换模型」→ 选择框 → 选 haiku
     const req: any = await new Promise((r) => {
       ws.on('message', (d) => { const m = JSON.parse(d.toString()); if (m.type === 'modelRequest') r(m); });
       ws.send(JSON.stringify({ type: 'prompt', prompt: '切换模型' }));
     });
     expect(runModel).toBe('NONE');                       // 弹框期间没开跑
-    ws.send(JSON.stringify({ type: 'permissionDecision', id: req.id, choice: 'fable', allowKey: '' }));
+    ws.send(JSON.stringify({ type: 'permissionDecision', id: req.id, choice: 'haiku', allowKey: '' }));
     await new Promise((r) => setTimeout(r, 100));
 
-    // 下次开跑带 --model(fable → claude-fable-5)
+    // 下次开跑带 --model(haiku → haiku 别名)
     ws.send(JSON.stringify({ type: 'prompt', prompt: '随便跑一下' }));
     await new Promise((r) => setTimeout(r, 150));
-    expect(runModel).toBe('claude-fable-5');
+    expect(runModel).toBe('haiku');
 
     // 裸型号名不再被识别为切换 → 照常当 prompt 开跑(不拦截)
     ws.send(JSON.stringify({ type: 'prompt', prompt: '切换到 opus' }));
     await new Promise((r) => setTimeout(r, 150));
-    expect(runModel).toBe('claude-fable-5');             // 仍是上次选定的 fable(opus 没被当成切换)
+    expect(runModel).toBe('haiku');                      // 仍是上次选定的 haiku(opus 没被当成切换)
     ws.close();
   });
 
@@ -311,7 +311,7 @@ describe('语音切模型拦截', () => {
       ws.on('message', (d) => { const m = JSON.parse(d.toString()); if (m.type === 'modelRequest') r(m); });
       ws.send(JSON.stringify({ type: 'prompt', prompt: '切换模型' }));
     });
-    expect(req.options).toEqual(['opus', 'sonnet', 'fable', '取消']);
+    expect(req.options).toEqual(['opus', 'sonnet', 'haiku', '取消']);
     expect(typeof req.id).toBe('string');
     const usages: any[] = [];
     ws.on('message', (d) => { const m = JSON.parse(d.toString()); if (m.type === 'usage') usages.push(m); });

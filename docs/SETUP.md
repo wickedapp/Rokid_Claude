@@ -180,7 +180,7 @@ Two limitations to know:
   opens the Wi-Fi panel.
 - Say **"新会话" / "new session"** to reset, **"退出" / "exit"** to close.
 - Say **"切换模型" / "switch model"** to open the model picker (opus / sonnet /
-  fable), then swipe to choose and tap to confirm.
+  haiku), then swipe to choose and tap to confirm.
 - Say **"网络" / "wifi"** to open the system Wi-Fi panel.
 - Say **"切换语言" / "switch language"** to toggle the interface language (UI +
   speech recognition + replies) between `zh` and `en` for the current session.

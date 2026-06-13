@@ -46,7 +46,7 @@ export function createRelayServer(opts: ServerOptions) {
 
   let lang: Lang = 'zh';                      // 本连接语言(hello 时由客户端 config 传入)
   let currentModel: string | null = null;   // 最近一次 system 事件的真实模型(全 id)
-  let selectedModel: ModelAlias | null = null;  // 用户语音选定的别名(opus/sonnet/fable),开跑前即显示
+  let selectedModel: ModelAlias | null = null;  // 用户语音选定的别名(opus/sonnet/haiku),开跑前即显示
   let sessionCostUsd = 0;
   let sessionTokens = 0;
 
@@ -61,7 +61,7 @@ export function createRelayServer(opts: ServerOptions) {
   function requestModelChoice(current: ModelAlias | null, timeoutMs = 60000): Promise<string> {
     const id = `model-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const cancel = tr(lang).modelCancel;
-    const options = ['opus', 'sonnet', 'fable', cancel];
+    const options = ['opus', 'sonnet', 'haiku', cancel];
     const currentIdx = current ? options.indexOf(current) : 0;
     return new Promise((resolve) => {
       let done = false;
@@ -206,7 +206,7 @@ export function createRelayServer(opts: ServerOptions) {
         const cmd = parseModelCommand(msg.prompt, lang);
         if (cmd?.kind === 'pick') {
           void requestModelChoice(selectedModel).then((choice) => {
-            if (choice === 'opus' || choice === 'sonnet' || choice === 'fable') applyModel(choice);
+            if (choice === 'opus' || choice === 'sonnet' || choice === 'haiku') applyModel(choice);
           });
           return;
         }

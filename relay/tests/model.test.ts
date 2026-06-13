@@ -41,9 +41,9 @@ describe('parseModelCommand en', () => {
 });
 
 describe('modelArg', () => {
-  it('opus/sonnet 用别名,fable 用全 id', () => {
+  it('opus/sonnet/haiku 都用别名', () => {
     expect(modelArg('opus' as ModelAlias)).toBe('opus');
     expect(modelArg('sonnet' as ModelAlias)).toBe('sonnet');
-    expect(modelArg('fable' as ModelAlias)).toBe('claude-fable-5');
+    expect(modelArg('haiku' as ModelAlias)).toBe('haiku');
   });
 });
