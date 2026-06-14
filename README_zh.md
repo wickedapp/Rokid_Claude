@@ -65,7 +65,7 @@ https://github.com/user-attachments/assets/2a4a304b-4600-4c17-8bcb-167e576b47e8
 ## 快速开始
 
 ```bash
-git clone <this-repo> && cd Rokid-Claude
+git clone https://github.com/williamlzz/Rokid_Claude && cd Rokid_Claude
 cd relay && npm install
 ```
 
@@ -77,6 +77,23 @@ cd relay && npm install
 3. 跑 `./start.command`(USB),在设备上打开 Rokid Claude。
 
 完整的本地 + 远程步骤见 [docs/SETUP.md](docs/SETUP.md)。
+
+## 开发
+
+跑测试:
+
+```bash
+cd relay && npm test                              # 中继 (vitest)
+cd android && ./gradlew :app:testDebugUnitTest    # Android (JUnit)
+```
+
+在 macOS 上构建 Android app 需要 **JDK 17**(系统默认可能更老——否则 Gradle 会报一个
+晦涩的 `Could not resolve com.android.tools.build:gradle`)加 Android SDK:
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+```
 
 ## 安全
 

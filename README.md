@@ -69,7 +69,7 @@ own the glasses and run Claude Code at home.
 ## Quick Start
 
 ```bash
-git clone <this-repo> && cd Rokid-Claude
+git clone https://github.com/williamlzz/Rokid_Claude && cd Rokid_Claude
 cd relay && npm install
 ```
 
@@ -82,6 +82,24 @@ Then install the client and configure it:
 3. Run `./start.command` (USB) and open Rokid Claude on the device.
 
 Full local and remote instructions: [docs/SETUP.md](docs/SETUP.md).
+
+## Development
+
+Run the tests:
+
+```bash
+cd relay && npm test                              # relay (vitest)
+cd android && ./gradlew :app:testDebugUnitTest    # Android (JUnit)
+```
+
+Building the Android app on macOS needs **JDK 17** (the system default may be
+older — Gradle then fails with a cryptic "Could not resolve
+com.android.tools.build:gradle") plus the Android SDK:
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+```
 
 ## Security
 

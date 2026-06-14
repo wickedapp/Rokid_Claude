@@ -17,9 +17,15 @@ ngrok tunnel.
   and place it at `relay/models/ggml-small.bin`. This directory is gitignored and
   is **not** shipped with the repo.
 - **Android client** — either sideload the prebuilt APK from the GitHub Release,
-  or build it yourself with `./gradlew :app:assembleDebug` (needs JDK 17 + the
-  Android SDK). `adb` must be on your PATH or at
-  `$HOME/Library/Android/sdk/platform-tools/adb`.
+  or build it yourself with `./gradlew :app:assembleDebug`. Building needs
+  **JDK 17** and the Android SDK. On macOS the system default may be an older JDK;
+  point Gradle at 17 explicitly (otherwise it fails with a cryptic
+  "Could not resolve com.android.tools.build:gradle"):
+  ```bash
+  export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+  export ANDROID_HOME="$HOME/Library/Android/sdk"
+  ```
+  `adb` must be on your PATH or at `$ANDROID_HOME/platform-tools/adb`.
 
 ## Local setup (USB)
 
@@ -189,3 +195,28 @@ Two limitations to know:
   restart (not persisted).
 - Language (UI + speech) starts from `lang` in `config.json` (`zh` or `en`).
 - Spoken shortcuts are defined in `relay/dictionary.<lang>.json` (edit live).
+
+## Troubleshooting
+
+**The HUD footer stays "disconnected".** The relay isn't running or isn't
+reachable. Locally, re-run `./start.command` (it sets up `adb reverse` and starts
+the relay). Remotely, check that `start-remote.command` is still running, the
+Mac is awake, and the glasses have internet. Confirm the relay is up with
+`lsof -iTCP:8787 -sTCP:LISTEN`.
+
+**Relay logs "Not logged in" / `apiKeySource:none`.** The spawned `claude` CLI
+isn't logged in. Run `claude` once interactively and `/login` (a desktop login is
+separate — you still authorize the CLI once).
+
+**Android build fails with "Could not resolve com.android.tools.build:gradle …
+compatible with Java 11".** Gradle is running on an older JDK. Export
+`JAVA_HOME` to a JDK 17 (see Prerequisites) and retry.
+
+**Speech gets cut off or misheard.** Speak at a normal volume, not too far from
+the mic, and pause when done. English letters/acronyms can be imperfect with the
+local `small` whisper model — phrase around them or correct afterward.
+
+**Remote glasses can't reach the relay.** The config is fine; usually the Mac's
+relay/ngrok died or the Mac slept. Restart `start-remote.command`; the app
+auto-reconnects. The glasses also need real internet (phone hotspot) — iPhone
+hotspots sleep with no device connected, so keep the Personal Hotspot screen open.
