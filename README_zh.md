@@ -54,13 +54,15 @@ https://github.com/user-attachments/assets/2a4a304b-4600-4c17-8bcb-167e576b47e8
 
 ## 前置要求
 
-- 一副 **Rokid 眼镜**,或任意 **安卓手机** 当客户端。
-- 一台 **跑着 Claude Code 的家用 Mac**(需付费的 Claude 订阅/API)。
-- **Node.js ≥ 18**。
-- **whisper.cpp** 及 `ggml-small` 模型(单独下载)。
-- 出门远程用需要 **ngrok**。
+兴趣项目,门槛刻意偏小众。开始前你需要:
 
-这是个兴趣项目,门槛刻意偏小众——默认你已经有眼镜、且家里在跑 Claude Code。
+- **一台 Mac(macOS)。** 中继、Claude Code 和那些 `*.command` 脚本都跑在 macOS 上。
+  (中继是纯 Node/TS,理论上能改去 Linux,但脚本和配置都默认 Mac。)
+- 那台 Mac 上**装好并登录了 Claude Code**——需付费的 Claude 订阅或 API。
+- **Rokid 眼镜**(或任意安卓手机)当客户端。
+- **一根能传数据的 USB「开发线」,用于一次性配置。** 装 APK、打开 USB 调试、首次配网
+  都得插线一次——只能充电的线不行。之后无线 adb + 扫码配网就免线了。
+- **Node.js ≥ 18**、**whisper.cpp** + `ggml-small` 模型;出门远程用还需 **ngrok**。
 
 ## 快速开始
 

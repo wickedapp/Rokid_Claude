@@ -57,14 +57,20 @@ protocol over WebSocket so the core is client-agnostic. See
 
 ## Requirements
 
-- A **Rokid Glasses** *or* any **Android phone** as the client.
-- A **home Mac running Claude Code** (a paid Claude subscription/API access).
-- **Node.js ≥ 18**.
-- **whisper.cpp** plus the `ggml-small` model (downloaded separately).
-- **ngrok** for remote (out-of-home) use.
+A hobby project with a deliberately niche setup. Before you start, you'll need:
 
-This is a hobby project with a deliberately niche setup — it assumes you already
-own the glasses and run Claude Code at home.
+- **A Mac (macOS).** The relay, Claude Code, and the helper `*.command` scripts
+  all run on macOS. (The relay is plain Node/TS and could be adapted to Linux,
+  but the scripts and setup assume a Mac.)
+- **Claude Code** installed and logged in on that Mac — a paid Claude
+  subscription or API access.
+- **Rokid Glasses** (or any Android phone) as the client.
+- **A USB data cable for the one-time setup.** Installing the APK, enabling USB
+  debugging, and provisioning the first network each need a wired connection
+  once — a charge-only cable won't work. After that, wireless adb and QR
+  provisioning keep it cable-free.
+- **Node.js ≥ 18**, **whisper.cpp** + the `ggml-small` model, and **ngrok** (for
+  remote/out-of-home use).
 
 ## Quick Start
 
