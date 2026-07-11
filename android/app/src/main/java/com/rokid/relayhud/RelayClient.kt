@@ -63,6 +63,22 @@ class RelayClient(
         send(JSONObject().put("type", "audio").put("wav", wavBase64).toString())
     }
     fun stop() = send("""{"type":"stop"}""")
+    fun listAoeSessions() = send("""{"type":"listAoeSessions"}""")
+    fun openAoeSession(sessionId: String) {
+        send(JSONObject().put("type", "openAoeSession").put("sessionId", sessionId).put("lines", 80).toString())
+    }
+    fun refreshAoeTerminal(sessionId: String) {
+        send(JSONObject().put("type", "refreshAoeTerminal").put("sessionId", sessionId).put("lines", 80).toString())
+    }
+    fun sendAoePrompt(sessionId: String, prompt: String) {
+        send(JSONObject().put("type", "sendAoePrompt").put("sessionId", sessionId).put("prompt", prompt).put("lines", 80).toString())
+    }
+    fun createAoeSession(tool: String, path: String? = null, group: String? = null) {
+        val o = JSONObject().put("type", "createAoeSession").put("tool", tool).put("lines", 80)
+        if (!path.isNullOrBlank()) o.put("path", path)
+        if (!group.isNullOrBlank()) o.put("group", group)
+        send(o.toString())
+    }
     fun newSession() = send("""{"type":"newSession"}""")
     fun setLang(newLang: String) {
         lang = newLang

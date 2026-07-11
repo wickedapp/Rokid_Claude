@@ -1,0 +1,167 @@
+import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+const AOE_BIN = process.env.AOE_BINARY || 'aoe';
+const AOE_PROFILE = process.env.AGENT_OF_EMPIRES_PROFILE || 'default';
+const AOE_SESSIONS_JSON = process.env.AOE_SESSIONS_JSON || join(homedir(), '.agent-of-empires', 'profiles', AOE_PROFILE, 'sessions.json');
+
+export interface AoeSession {
+  id: string;
+  title: string;
+  tool: string;
+  group: string;
+  status: string;
+  path: string;
+  hasTerminal: boolean;
+  unread: boolean;
+  age: string;
+  lastAccessedAt: string;
+}
+
+export interface AoeTerminal {
+  id: string;
+  title: string;
+  tool: string;
+  status: string;
+  content: string;
+  lines: number;
+}
+
+export interface CreateAoeSessionOptions {
+  tool: string;
+  path?: string;
+  group?: string;
+  title?: string;
+}
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
+}
+
+function str(v: unknown): string { return typeof v === 'string' ? v : ''; }
+function bool(v: unknown): boolean { return typeof v === 'boolean' ? v : false; }
+
+async function aoe(args: string[], timeout = 8000): Promise<string> {
+  const { stdout } = await execFileAsync(AOE_BIN, args, {
+    timeout,
+    maxBuffer: 2 * 1024 * 1024,
+    env: { ...process.env, NO_COLOR: '1' },
+  });
+  return stdout;
+}
+
+async function showAoeSession(id: string): Promise<Record<string, unknown>> {
+  try {
+    return asRecord(JSON.parse(await aoe(['session', 'show', id, '--json'], 5000)) as unknown);
+  } catch {
+    return {};
+  }
+}
+
+async function loadStoredSessions(): Promise<Map<string, Record<string, unknown>>> {
+  try {
+    const parsed = JSON.parse(await readFile(AOE_SESSIONS_JSON, 'utf8')) as unknown;
+    const rows = Array.isArray(parsed) ? parsed : [];
+    return new Map(rows.map((item) => {
+      const o = asRecord(item);
+      return [str(o.id), o] as const;
+    }).filter(([id]) => id));
+  } catch {
+    return new Map();
+  }
+}
+
+function statusRank(status: string): number {
+  const s = status.toLowerCase();
+  if (s === 'running' || s === 'waiting' || s === 'active') return 0;
+  if (s === 'idle') return 1;
+  if (s === 'error') return 2;
+  if (s === 'stopped') return 3;
+  return 4;
+}
+
+function ageOf(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  const seconds = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (seconds < 60) return '<1m';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
+export async function listAoeSessions(): Promise<AoeSession[]> {
+  const stored = await loadStoredSessions();
+  const raw = await aoe(['list', '--json']);
+  const parsed = JSON.parse(raw) as unknown;
+  const rows = Array.isArray(parsed) ? parsed : [];
+  const sessions = await Promise.all(rows.map(async (item) => {
+    const o = asRecord(item);
+    const id = str(o.id);
+    const storedRow = stored.get(id) ?? {};
+    const detail = id ? await showAoeSession(id) : {};
+    const path = str(detail.path || storedRow.project_path || storedRow.path || o.path || o.project_path);
+    const status = str(detail.status || storedRow.status || o.status || '');
+    const lastAccessedAt = str(storedRow.last_accessed_at || o.last_accessed_at || storedRow.created_at || o.created_at);
+    return {
+      id,
+      title: str(detail.title || storedRow.title || o.title),
+      tool: str(detail.tool || storedRow.tool || o.tool || o.command || 'agent'),
+      group: str(detail.group || storedRow.group_path || storedRow.group || o.group || o.group_path),
+      status,
+      path,
+      hasTerminal: bool(o.has_terminal) || true,
+      unread: bool(storedRow.unread) || bool(o.unread),
+      age: ageOf(lastAccessedAt),
+      lastAccessedAt,
+    };
+  }));
+  return sessions
+    .filter((s) => s.id && s.title && !s.path.includes('/.aoe-trash/'))
+    .sort((a, b) => statusRank(a.status) - statusRank(b.status)
+      || a.group.localeCompare(b.group)
+      || Date.parse(b.lastAccessedAt || '0') - Date.parse(a.lastAccessedAt || '0')
+      || a.title.localeCompare(b.title));
+}
+
+export async function captureAoeSession(id: string, lines = 38): Promise<AoeTerminal> {
+  const safeLines = Math.max(5, Math.min(120, Math.floor(lines)));
+  const raw = await aoe(['session', 'capture', id, '--json', '--strip-ansi', '-n', String(safeLines)]);
+  const o = asRecord(JSON.parse(raw) as unknown);
+  return {
+    id: str(o.id) || id,
+    title: str(o.title) || id,
+    tool: str(o.tool || 'agent'),
+    status: str(o.status || ''),
+    content: str(o.content),
+    lines: typeof o.lines === 'number' ? o.lines : safeLines,
+  };
+}
+
+export async function sendAoeMessage(id: string, message: string): Promise<void> {
+  if (!message.trim()) return;
+  await aoe(['send', id, message], 15000);
+}
+
+export async function createAoeSession(opts: CreateAoeSessionOptions): Promise<AoeSession> {
+  const tool = opts.tool.includes('codex') ? 'codex' : opts.tool.includes('claude') ? 'claude' : opts.tool;
+  const title = opts.title || `Rokid-${tool}-${new Date().toISOString().slice(11, 16).replace(':', '')}`;
+  const args = ['add', '--tool', tool, '--title', title, '--launch', '--yolo'];
+  if (opts.group) args.push('--group', opts.group);
+  if (opts.path) args.push(opts.path);
+  else args.push('--scratch');
+  const out = await aoe(args, 30000);
+  const match = out.match(/([a-f0-9]{12,16})/i);
+  const sessions = await listAoeSessions();
+  return (match ? sessions.find((s) => s.id.startsWith(match[1])) : undefined)
+    || sessions.find((s) => s.title === title)
+    || sessions[0]
+    || { id: '', title, tool, group: opts.group || 'Scratch', status: 'creating', path: opts.path || '', hasTerminal: true, unread: false, age: '<1m', lastAccessedAt: new Date().toISOString() };
+}

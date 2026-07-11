@@ -11,6 +11,7 @@ import { decide, summarize } from './permission';
 import { expandPrompt, loadDictionary } from './dictionary';
 import { parseModelCommand, modelArg, type ModelAlias } from './model';
 import { tr, normalizeLang, type Lang } from './i18n';
+import { captureAoeSession, createAoeSession, listAoeSessions, sendAoeMessage } from './aoe';
 
 type RunnerFn = (opts: { prompt: string; cwd: string; sessionId?: string; model?: string }) => RunHandle;
 type TranscriberFn = (wavPath: string, modelPath: string, lang: Lang) => Promise<string>;
@@ -153,6 +154,16 @@ export function createRelayServer(opts: ServerOptions) {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'transcript', text }));
   }
 
+  async function sendAoeSessions(send: (msg: unknown) => void) {
+    try { send({ type: 'aoeSessions', sessions: await listAoeSessions() }); }
+    catch (err) { send({ type: 'aoeError', message: String(err) }); }
+  }
+
+  async function sendAoeTerminal(send: (msg: unknown) => void, sessionId: string, lines = 38) {
+    try { send({ type: 'aoeTerminal', terminal: await captureAoeSession(sessionId, lines) }); }
+    catch (err) { send({ type: 'aoeError', message: String(err), sessionId }); }
+  }
+
   const wss = new WebSocketServer({ server: http });
   wss.on('connection', (ws, req) => {
     if (!checkToken(req.url, opts.token)) { ws.close(1008, 'unauthorized'); return; }
@@ -181,7 +192,7 @@ export function createRelayServer(opts: ServerOptions) {
     store.on('runEnd', onRunEnd);
 
     ws.on('message', (data) => {
-      let msg: { type?: string; prompt?: string; lastRunId?: string; lastSeq?: number; wav?: string; id?: string; choice?: string; allowKey?: string; lang?: string };
+      let msg: { type?: string; prompt?: string; lastRunId?: string; lastSeq?: number; wav?: string; id?: string; choice?: string; allowKey?: string; lang?: string; sessionId?: string; lines?: number; tool?: string; path?: string; group?: string; title?: string };
       try { msg = JSON.parse(data.toString()); } catch { return; }
 
       if (msg.type === 'hello') {
@@ -200,6 +211,25 @@ export function createRelayServer(opts: ServerOptions) {
         }
         queue.length = 0;
         live = true;
+        void sendAoeSessions(send);
+        return;
+      }
+      if (msg.type === 'listAoeSessions') { void sendAoeSessions(send); return; }
+      if ((msg.type === 'openAoeSession' || msg.type === 'refreshAoeTerminal') && msg.sessionId) {
+        void sendAoeTerminal(send, msg.sessionId, msg.lines);
+        return;
+      }
+      if (msg.type === 'sendAoePrompt' && msg.sessionId && typeof msg.prompt === 'string') {
+        void sendAoeMessage(msg.sessionId, msg.prompt).then(() => sendAoeTerminal(send, msg.sessionId!, msg.lines));
+        return;
+      }
+      if (msg.type === 'createAoeSession' && typeof msg.tool === 'string') {
+        void createAoeSession({ tool: msg.tool, path: msg.path, group: msg.group, title: msg.title })
+          .then(async (session) => {
+            send({ type: 'aoeSessions', sessions: await listAoeSessions() });
+            if (session.id) send({ type: 'aoeTerminal', terminal: await captureAoeSession(session.id, msg.lines) });
+          })
+          .catch((err) => send({ type: 'aoeError', message: String(err) }));
         return;
       }
       if (msg.type === 'prompt' && msg.prompt) {

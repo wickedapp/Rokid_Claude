@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rokid Claude HUD style sketches</title>
+<style>
+*{box-sizing:border-box} body{margin:0;background:#090d09;color:#dfffe4;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;padding:24px} h1{font-size:28px;margin:0 0 8px} p{color:#9bd99f;line-height:1.55} .grid{display:grid;grid-template-columns:repeat(3,480px);gap:22px;align-items:start;margin-top:20px}.card{border:1px solid #1d5f2d;background:#020402;border-radius:18px;padding:14px;box-shadow:0 0 30px #003b1440}.card h2{font-size:18px;margin:0 0 10px;color:#40ff5e}.frame{width:480px;height:640px;border:1px solid #16451d;border-radius:14px;overflow:hidden;background:#000}.meta{font-size:13px;color:#93d99d;margin-top:10px}.open{display:inline-block;margin-top:10px;color:#001b07;background:#40ff5e;padding:7px 10px;border-radius:8px;text-decoration:none;font-weight:700}.compare{max-width:1480px;margin-top:28px;border-collapse:collapse}.compare th,.compare td{border:1px solid #1b5023;padding:10px;text-align:left}.compare th{color:#40ff5e;background:#061206}.compare td{color:#c9ffd0}
+</style>
+</head>
+<body>
+<h1>Rokid Claude HUD：三個眼鏡端樣式方向</h1>
+<p>所有畫面都以 <b>480×640</b>、黑底綠字、上下左右/確認/退出操作為前提。下面是可比較的互動 HTML mockups。</p>
+<div class="grid">
+  <section class="card"><h2>A. Command Deck</h2><iframe class="frame" src="variant-a-command-deck.html"></iframe><div class="meta">任務卡 + 明確焦點。適合日常外出下 prompt/看狀態。</div><a class="open" href="variant-a-command-deck.html">Open A</a></section>
+  <section class="card"><h2>B. Terminal BBS</h2><iframe class="frame" src="variant-b-terminal-bbs.html"></iframe><div class="meta">高密度日誌流。適合 coding/debug power-user。</div><a class="open" href="variant-b-terminal-bbs.html">Open B</a></section>
+  <section class="card"><h2>C. Focus Lanes</h2><iframe class="frame" src="variant-c-focus-lanes.html"></iframe><div class="meta">三大操作區，焦點很粗。適合眼鏡可讀性和新手。</div><a class="open" href="variant-c-focus-lanes.html">Open C</a></section>
+</div>
+<table class="compare">
+<tr><th>方向</th><th>密度</th><th>操作模型</th><th>強項</th><th>弱項</th></tr>
+<tr><td>A Command Deck</td><td>中</td><td>上下換卡，Enter 執行/展開，Back 退出區域</td><td>任務狀態清楚，permission/model picker 好做</td><td>長輸出需要進入詳情流</td></tr>
+<tr><td>B Terminal BBS</td><td>高</td><td>左右翻頁/切區，上下逐行，Enter 打開目前行</td><td>最像 Claude Code streaming，資訊量大</td><td>字較小，初用者壓力較大</td></tr>
+<tr><td>C Focus Lanes</td><td>低-中</td><td>三個 lane：任務/輸出/操作；上下換 lane，左右調選項</td><td>焦點非常明顯，符合眼鏡端安全操作</td><td>螢幕利用率最低</td></tr>
+</table>
+</body>
+</html>

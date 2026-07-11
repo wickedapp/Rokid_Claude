@@ -19,8 +19,8 @@ class GesturesTest {
     @Test fun backNotMappedLeftToSystem() {
         assertNull(Gestures.map(KeyEvent.KEYCODE_BACK, KeyEvent.ACTION_UP))
     }
-    @Test fun trailingDpadUpDownIgnored() {
-        assertNull(Gestures.map(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.ACTION_UP))
-        assertNull(Gestures.map(KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.ACTION_UP))
+    @Test fun dpadUpDownAlsoWorkForKeyboardNavigation() {
+        assertEquals(GestureAction.SCROLL_UP, Gestures.map(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.ACTION_UP))
+        assertEquals(GestureAction.SCROLL_DOWN, Gestures.map(KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.ACTION_UP))
     }
 }

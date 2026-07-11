@@ -6,7 +6,7 @@ import org.junit.Test
 class ConfigTest {
     @Test fun nullOrBlankJson_returnsLocalDefault() {
         val c = parseConfig(null)
-        assertEquals("ws://localhost:8787", c.serverUrl)
+        assertEquals("ws://localhost:8788", c.serverUrl)
         assertEquals("", c.token)
         assertEquals(DEFAULT_CONFIG, parseConfig("   "))
     }
@@ -30,7 +30,7 @@ class ConfigTest {
     }
 
     @Test fun buildWsUrl_noToken_returnsHostUnchanged() {
-        assertEquals("ws://localhost:8787", buildWsUrl("ws://localhost:8787", ""))
+        assertEquals("ws://localhost:8788", buildWsUrl("ws://localhost:8788", ""))
     }
 
     @Test fun buildWsUrl_withToken_appendsEncodedQuery() {

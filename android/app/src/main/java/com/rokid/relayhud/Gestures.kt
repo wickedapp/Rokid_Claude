@@ -16,8 +16,8 @@ object Gestures {
         if (action != KeyEvent.ACTION_UP) return null
         return when (keyCode) {
             KeyEvent.KEYCODE_ENTER -> GestureAction.TAP
-            KeyEvent.KEYCODE_DPAD_LEFT -> GestureAction.SCROLL_UP
-            KeyEvent.KEYCODE_DPAD_RIGHT -> GestureAction.SCROLL_DOWN
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_UP -> GestureAction.SCROLL_UP
+            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_DOWN -> GestureAction.SCROLL_DOWN
             else -> null
         }
     }

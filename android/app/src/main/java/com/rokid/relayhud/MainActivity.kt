@@ -103,9 +103,20 @@ class MainActivity : ComponentActivity() {
                         matchesLangSwitch(msg.text) -> switchLang(if (lang == "zh") "en" else "zh")
                         else -> {
                             hud.add("▶ $t", Color(0xFF00AA77)); hud.status = s.submitting; running = true; refreshKeepOn()
-                            client.sendPrompt(t)
+                            if (hud.mode == HudMode.AOE_TERMINAL && hud.activeSessionId != null) {
+                                client.sendAoePrompt(hud.activeSessionId!!, t)
+                            } else {
+                                client.sendPrompt(t)
+                            }
                         }
                     }
+                } else if (msg is ServerMessage.AoeSessions) {
+                    hud.setAoeSessions(msg.sessions)
+                } else if (msg is ServerMessage.AoeTerminal) {
+                    hud.showTerminal(msg.terminal)
+                } else if (msg is ServerMessage.AoeError) {
+                    hud.status = "AOE error"
+                    hud.add("AOE: ${msg.message}", Color(0xFFFF5555))
                 } else {
                     if (msg is ServerMessage.RunEnd) { running = false; refreshKeepOn() }
                     handle(msg, hud, s)
@@ -126,6 +137,24 @@ class MainActivity : ComponentActivity() {
         setContent { HudScreen(state = hud, connStatus = conn.value, s = s, connected = connected.value) }
     }
 
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        if (hud.mode == HudMode.AOE_TEXT_INPUT) {
+            when (keyCode) {
+                android.view.KeyEvent.KEYCODE_DEL -> { hud.backspaceText(); return true }
+                android.view.KeyEvent.KEYCODE_ENTER, android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> { submitTextReply(); return true }
+                android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> return true
+            }
+            val c = event.unicodeChar
+            if (c > 0 && !event.isCtrlPressed && !event.isMetaPressed) {
+                hud.appendText(c.toChar())
+                return true
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
         if (hud.blanked) {
             // 灭屏态:吞掉所有事件;仅"真手势"(单击/双击/滑动)才唤醒,避免预触发漏到 onTap
@@ -143,7 +172,11 @@ class MainActivity : ComponentActivity() {
                 else -> {}
             }
         }
-        if (keyCode == android.view.KeyEvent.KEYCODE_BACK) { setBlanked(true); return true }  // 双击=主动灭屏
+        if (keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+            if (handleAoeBack()) return true
+            setBlanked(true); return true
+        }  // 双击=终端页返回列表;列表页主动灭屏
+        if (hud.mode == HudMode.AOE_TEXT_INPUT) return true
         // 选择模式优先截胡:前/后滑移动高亮,单击确认。
         val p = hud.choice
         val cs = choiceState
@@ -158,8 +191,14 @@ class MainActivity : ComponentActivity() {
         }
         return when (Gestures.map(keyCode, android.view.KeyEvent.ACTION_UP)) {
             GestureAction.TAP -> { onTap(); true }
-            GestureAction.SCROLL_UP -> { hud.scroll(-1); true }
-            GestureAction.SCROLL_DOWN -> { hud.scroll(1); true }
+            GestureAction.SCROLL_UP -> {
+                if (hud.mode == HudMode.AOE_SESSIONS) hud.moveSession(-1) else hud.scroll(-1)
+                true
+            }
+            GestureAction.SCROLL_DOWN -> {
+                if (hud.mode == HudMode.AOE_SESSIONS) hud.moveSession(1) else hud.scroll(1)
+                true
+            }
             null -> super.onKeyUp(keyCode, event)   // 其它未映射键(滑动尾随键等)放行
         }
     }
@@ -230,8 +269,38 @@ class MainActivity : ComponentActivity() {
         if (hasFocus && hud.blanked) setBlanked(false)  // 面板被唤醒即恢复显示
     }
 
-    /** 单击语境感知:录音中→停发;Claude 运行中→打断;空闲→开录。 */
+    /** 单击:列表页打开/新建 AoE session;终端页进入 Reply;菜单页确认。 */
     private fun onTap() {
+        when (hud.mode) {
+            HudMode.AOE_SESSIONS -> {
+                when (hud.selectedSessionIndex) {
+                    -2 -> { hud.enterNewSessionMenu(); hud.newSessionIndex = 0; return }
+                    -1 -> { hud.enterNewSessionMenu(); hud.newSessionIndex = 1; return }
+                }
+                val session = hud.aoeSessions.getOrNull(hud.selectedSessionIndex) ?: return
+                hud.status = "opening ${session.title}"
+                client.openAoeSession(session.id)
+                return
+            }
+            HudMode.AOE_TERMINAL -> { hud.enterReplyMenu(); return }
+            HudMode.AOE_REPLY_MENU -> {
+                when (hud.replyMenuIndex) {
+                    0 -> startVoiceReply()
+                    1 -> hud.enterTextInput()
+                    else -> hud.mode = HudMode.AOE_TERMINAL
+                }
+                return
+            }
+            HudMode.AOE_NEW_SESSION_MENU -> {
+                when (hud.newSessionIndex) {
+                    0 -> { hud.status = "creating Claude"; client.createAoeSession("claude") }
+                    1 -> { hud.status = "creating Codex"; client.createAoeSession("codex") }
+                    else -> hud.mode = HudMode.AOE_SESSIONS
+                }
+                return
+            }
+            HudMode.AOE_TEXT_INPUT -> { submitTextReply(); return }
+        }
         when {
             recording -> { voice.stop(); recording = false /* onAudio 里会再确认 */ }
             running -> { client.stop(); hud.status = s.stopped; running = false }
@@ -244,6 +313,58 @@ class MainActivity : ComponentActivity() {
             }
         }
         refreshKeepOn()
+    }
+
+    private fun handleAoeBack(): Boolean {
+        return when (hud.mode) {
+            HudMode.AOE_TERMINAL -> {
+                hud.mode = HudMode.AOE_SESSIONS
+                client.listAoeSessions()
+                true
+            }
+            HudMode.AOE_REPLY_MENU -> {
+                hud.mode = HudMode.AOE_TERMINAL
+                restoreTerminalStatus()
+                true
+            }
+            HudMode.AOE_TEXT_INPUT -> {
+                hud.textInput = ""
+                hud.mode = HudMode.AOE_REPLY_MENU
+                hud.status = "Reply"
+                true
+            }
+            HudMode.AOE_NEW_SESSION_MENU -> {
+                hud.mode = HudMode.AOE_SESSIONS
+                client.listAoeSessions()
+                true
+            }
+            else -> false
+        }
+    }
+
+    private fun restoreTerminalStatus() {
+        val t = hud.terminal ?: return
+        hud.status = "${t.tool.uppercase()} / ${t.title} / ${t.status.uppercase()}"
+    }
+
+    private fun submitTextReply() {
+        val text = hud.textInput.trim()
+        if (text.isEmpty()) { hud.status = "empty reply"; return }
+        val id = hud.activeSessionId ?: return
+        hud.status = "sending"
+        hud.mode = HudMode.AOE_TERMINAL
+        client.sendAoePrompt(id, text)
+        hud.textInput = ""
+    }
+
+    private fun startVoiceReply() {
+        if (audioGranted.value) {
+            hud.mode = HudMode.AOE_TERMINAL
+            voice.start(); recording = true; hud.recording = true; hud.status = s.recordingStatus
+            refreshKeepOn()
+        } else {
+            hud.status = s.micUnauthorized; requestAudio.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     /** 直接 toggle 中英:本端热重绘 + 通知 relay + 用新语言提示。仅本次会话有效。 */
@@ -275,6 +396,9 @@ fun handle(msg: ServerMessage, state: HudState, s: Strings) {
         is ServerMessage.PermissionRequest -> {}  // 在 onMessage 上游处理(进选择模式)
         is ServerMessage.Usage -> {}
         is ServerMessage.ModelRequest -> {}
+        is ServerMessage.AoeSessions -> {}
+        is ServerMessage.AoeTerminal -> {}
+        is ServerMessage.AoeError -> {}
         ServerMessage.Unknown -> {}
     }
 }

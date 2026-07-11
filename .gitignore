@@ -2,6 +2,8 @@ node_modules/
 dist/
 .env
 .env.*
+.omc/
+relay/.omc/
 *.log
 .DS_Store
 relay/sandbox/

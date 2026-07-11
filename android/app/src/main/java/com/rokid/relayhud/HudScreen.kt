@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -13,16 +13,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 val Green = Color(0xFF00FF00)
-val DimGreen = Color(0xFF7CE07C)   // 次要标签:调亮以便光学屏看清(原 2E7D2E 太暗)
+val DimGreen = Color(0xFF7CE07C)
+val FocusBg = Color(0x3328FF48)
 
 data class HudLine(val text: String, val color: Color = Green)
+enum class HudMode { AOE_SESSIONS, AOE_TERMINAL, AOE_REPLY_MENU, AOE_TEXT_INPUT, AOE_NEW_SESSION_MENU }
 
 /** 权限选择模式的当前状态(高亮项与剩余秒数由 MainActivity 更新)。 */
 data class PermissionPrompt(
@@ -37,12 +39,22 @@ data class PermissionPrompt(
 
 class HudState {
     val lines = mutableStateListOf<HudLine>()
-    var status by mutableStateOf("")              // 由 MainActivity 用 Strings 初始化
+    val aoeSessions = mutableStateListOf<AoeSessionSummary>()
+    var mode by mutableStateOf(HudMode.AOE_SESSIONS)
+    var selectedSessionIndex by mutableStateOf(0)
+    var activeSessionId by mutableStateOf<String?>(null)
+    var terminal by mutableStateOf<AoeTerminalSnapshot?>(null)
+    var replyMenuIndex by mutableStateOf(0)
+    var newSessionIndex by mutableStateOf(0)
+    var textInput by mutableStateOf("")
+    var terminalScroll by mutableStateOf(0)
+        private set
+    var status by mutableStateOf("")
     val toolIndex = mutableMapOf<String, Int>()
     var recording by mutableStateOf(false)
     var choice by mutableStateOf<PermissionPrompt?>(null)
     var blanked by mutableStateOf(false)
-    var statusline by mutableStateOf("")          // 由 MainActivity 用 Strings 初始化
+    var statusline by mutableStateOf("")
     var scrollTick by mutableStateOf(0)
         private set
     var scrollDir = 0
@@ -51,123 +63,277 @@ class HudState {
     private var lastWasText = false
 
     fun add(text: String, color: Color = Green) { lines.add(HudLine(text, color)); lastWasText = false }
-
-    /** 流式正文:按换行拆成多行(每项都矮于屏,可正确滚到底);首段续接上一条 text(跨 delta 同一行不断裂)。 */
     fun addText(text: String) {
         val parts = text.split("\n")
         parts.forEachIndexed { i, part ->
             if (i == 0 && lastWasText && lines.isNotEmpty()) {
                 val last = lines.size - 1
                 lines[last] = lines[last].copy(text = lines[last].text + part)
-            } else {
-                lines.add(HudLine(part, Green))
-            }
+            } else lines.add(HudLine(part, Green))
         }
         lastWasText = true
     }
 
+    fun setAoeSessions(items: List<AoeSessionSummary>) {
+        aoeSessions.clear(); aoeSessions.addAll(items)
+        if (selectedSessionIndex >= aoeSessions.size) selectedSessionIndex = (aoeSessions.size - 1).coerceAtLeast(0)
+        if (mode != HudMode.AOE_TERMINAL && mode != HudMode.AOE_REPLY_MENU && mode != HudMode.AOE_TEXT_INPUT) mode = HudMode.AOE_SESSIONS
+        val clde = items.count { it.tool.contains("claude", true) }
+        val cdex = items.count { it.tool.contains("codex", true) }
+        status = "aoe - Recent   CLDE $clde  CDEX $cdex"
+    }
+
+    fun moveSession(delta: Int) {
+        val min = -2 // -2 = + Claude, -1 = + Codex
+        val max = (aoeSessions.size - 1).coerceAtLeast(min)
+        selectedSessionIndex = (selectedSessionIndex + delta).coerceIn(min, max)
+    }
+
+    fun showTerminal(snapshot: AoeTerminalSnapshot) {
+        terminal = snapshot
+        activeSessionId = snapshot.id
+        terminalScroll = 0
+        mode = HudMode.AOE_TERMINAL
+        status = "${snapshot.tool.uppercase()} / ${snapshot.title} / ${snapshot.status.uppercase()}"
+    }
+
+    fun scroll(dir: Int) {
+        when (mode) {
+            HudMode.AOE_TERMINAL -> terminalScroll = (terminalScroll + dir).coerceIn(0, 10000)
+            HudMode.AOE_REPLY_MENU -> replyMenuIndex = (replyMenuIndex + dir).coerceIn(0, 2)
+            HudMode.AOE_NEW_SESSION_MENU -> newSessionIndex = (newSessionIndex + dir).coerceIn(0, 2)
+            else -> { scrollDir = dir; scrollTick++ }
+        }
+    }
+
+    fun enterReplyMenu() { replyMenuIndex = 0; mode = HudMode.AOE_REPLY_MENU; status = "Reply" }
+    fun enterTextInput() { textInput = ""; mode = HudMode.AOE_TEXT_INPUT; status = "Text reply" }
+    fun appendText(ch: Char) { textInput += ch }
+    fun backspaceText() { if (textInput.isNotEmpty()) textInput = textInput.dropLast(1) }
+    fun enterNewSessionMenu() { newSessionIndex = 0; mode = HudMode.AOE_NEW_SESSION_MENU; status = "New session" }
+
     fun clear() { lines.clear(); toolIndex.clear(); lastWasText = false }
-    /** dir>0 回到底(恢复跟随),dir<0 上翻一屏。 */
-    fun scroll(dir: Int) { scrollDir = dir; scrollTick++ }
 }
 
 @Composable
 fun HudScreen(state: HudState, connStatus: String, s: Strings, connected: Boolean) {
-    val listState = rememberLazyListState()
-    var following by remember { mutableStateOf(true) }
-
-    LaunchedEffect(state.lines.size) {
-        if (following && state.lines.isNotEmpty()) listState.animateScrollToItem(state.lines.size - 1)
-    }
-    LaunchedEffect(state.scrollTick) {
-        if (state.scrollTick == 0) return@LaunchedEffect
-        val page = listState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
-        if (state.scrollDir > 0) {
-            // 前滑=往下翻一屏;翻到底则恢复自动跟随
-            val target = listState.firstVisibleItemIndex + page
-            if (target >= state.lines.size - 1) {
-                following = true
-                if (state.lines.isNotEmpty()) listState.animateScrollToItem(state.lines.size - 1)
-            } else {
-                following = false
-                listState.animateScrollToItem(target)
-            }
-        } else {
-            // 后滑=往上翻一屏
-            following = false
-            listState.animateScrollToItem((listState.firstVisibleItemIndex - page).coerceAtLeast(0))
-        }
-    }
-
-    val body = TextStyle(color = Green, fontFamily = FontFamily.Monospace, fontSize = 15.sp)
-    val meta = TextStyle(color = DimGreen, fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+    val body = TextStyle(color = Green, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+    val meta = TextStyle(color = DimGreen, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
 
     Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 44.dp)) {
-            Row(
-                Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.crab_mark),
-                    contentDescription = null,
-                    modifier = Modifier.size(width = 21.dp, height = 14.dp).padding(end = 5.dp),
-                )
-                Text("Rokid Claude", style = meta.copy(color = Green))
-                Text(" · $connStatus", style = meta)
+        Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 30.dp)) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("AOE TERM", style = meta.copy(color = Green), maxLines = 1, softWrap = false)
+                Text(connStatus.uppercase(), style = meta, maxLines = 1, softWrap = false)
             }
-            Box(
-                Modifier.weight(1f).fillMaxWidth()
-                    .border(1.dp, Green, RoundedCornerShape(18.dp))
-                    .padding(14.dp)
-            ) {
-                Column(Modifier.fillMaxSize()) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(state.status, style = meta)
-                        if (state.recording) Text(s.recordingDot, style = body.copy(fontSize = 12.sp))
-                    }
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 6.dp)
-                    ) {
-                        items(state.lines) { line -> Text(line.text, color = line.color, style = body) }
-                    }
+            Text(state.status, style = meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Box(Modifier.weight(1f).fillMaxWidth().background(Color.Black)) {
+                when (state.mode) {
+                    HudMode.AOE_TERMINAL -> AoeTerminalView(state, body, meta)
+                    HudMode.AOE_REPLY_MENU -> AoeReplyMenu(state, body, meta)
+                    HudMode.AOE_TEXT_INPUT -> AoeTextInput(state, body, meta)
+                    HudMode.AOE_NEW_SESSION_MENU -> AoeNewSessionMenu(state, body, meta)
+                    else -> AoeSessionList(state, body, meta)
                 }
             }
-            Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                Text(state.statusline, style = meta.copy(color = Green), maxLines = 1, softWrap = false)
-                Text(if (connected) s.hint else s.offlineHint, style = meta.copy(fontSize = 11.sp))
+            val footer = when (state.mode) {
+                HudMode.AOE_TERMINAL -> "↑↓ SCROLL  ENTER REPLY  BACK SESSIONS"
+                HudMode.AOE_REPLY_MENU, HudMode.AOE_NEW_SESSION_MENU -> "↑↓ CHOOSE  ENTER OK  BACK CANCEL"
+                HudMode.AOE_TEXT_INPUT -> "TYPE TEXT  ENTER SEND  BACK CANCEL"
+                else -> "↑↓ MOVE  ENTER OPEN/NEW  BACK OFF"
             }
+            Text(
+                if (connected) footer else s.offlineHint,
+                style = meta.copy(color = Green, fontSize = 9.sp),
+                maxLines = 1,
+                softWrap = false,
+            )
         }
 
         state.choice?.let { p ->
             Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
                 Column(
-                    Modifier.fillMaxWidth(0.86f)
-                        .border(1.dp, Green, RoundedCornerShape(14.dp))
-                        .padding(14.dp),
+                    Modifier.fillMaxWidth(0.86f).border(1.dp, Green, RoundedCornerShape(14.dp)).padding(14.dp),
                 ) {
                     Text("${p.title} (${p.secondsLeft}s)", style = meta)
                     Text(p.summary, style = body.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 6.dp))
                     p.options.forEachIndexed { i, opt ->
                         val sel = i == p.highlight
-                        Text(
-                            (if (sel) "▸ " else "   ") + opt,
-                            style = body.copy(color = if (sel) Green else DimGreen),
-                        )
+                        Text((if (sel) "▸ " else "   ") + opt, style = body.copy(color = if (sel) Green else DimGreen))
                     }
                     Text(s.choiceHint, style = meta, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }
 
-        if (state.blanked) {
-            Box(Modifier.fillMaxSize().background(Color.Black))
+        if (state.blanked) Box(Modifier.fillMaxSize().background(Color.Black))
+    }
+}
+
+private fun fitCell(value: String, width: Int): String {
+    val clean = value.replace('\n', ' ').replace('\t', ' ').trim()
+    if (clean.length == width) return clean
+    if (clean.length < width) return clean.padEnd(width)
+    return clean.take((width - 1).coerceAtLeast(0)) + "…"
+}
+
+private fun toolCode(tool: String): String = when {
+    tool.contains("codex", true) -> "CDEX"
+    tool.contains("claude", true) -> "CLDE"
+    tool.contains("open", true) -> "OPEN"
+    else -> tool.uppercase().take(4).padEnd(4)
+}
+
+private data class SessionDisplayRow(
+    val kind: String,
+    val sessionIndex: Int = -99,
+    val text: String,
+)
+
+private fun sessionRows(sessions: List<AoeSessionSummary>): List<SessionDisplayRow> {
+    val rows = mutableListOf<SessionDisplayRow>()
+    rows += SessionDisplayRow("action", -2, "+ New Claude session")
+    rows += SessionDisplayRow("action", -1, "+ New Codex session")
+    sessions.groupBy { it.group.ifBlank { "Scratch" } }.forEach { (group, items) ->
+        rows += SessionDisplayRow("header", -99, "▾ $group (${items.size})")
+        items.forEach { item ->
+            val idx = sessions.indexOf(item)
+            val mark = if (item.unread) "*" else " "
+            val status = item.status.uppercase().let { if (it == "WAITING") "RUN" else it }
+            rows += SessionDisplayRow(
+                "session",
+                idx,
+                "$mark ${toolCode(item.tool)} ${fitCell(item.title, 27)} ${fitCell(item.age.ifBlank { status }, 4)}"
+            )
+        }
+    }
+    return rows
+}
+
+private fun wrapTerminalLine(line: String, width: Int = 46): List<String> {
+    val clean = line.replace('\t', ' ').replace('\u001B'.toString(), "")
+    if (clean.isEmpty()) return listOf(" ")
+    val out = mutableListOf<String>()
+    var rest = clean
+    while (rest.length > width) {
+        out += rest.take(width)
+        rest = "  " + rest.drop(width).trimStart()
+    }
+    out += rest
+    return out
+}
+
+@Composable
+private fun AoeSessionList(state: HudState, body: TextStyle, meta: TextStyle) {
+    val listState = rememberLazyListState()
+    val rows = remember(state.aoeSessions.toList(), state.selectedSessionIndex) { sessionRows(state.aoeSessions) }
+    val focusedRow = rows.indexOfFirst { it.sessionIndex == state.selectedSessionIndex }.coerceAtLeast(0)
+    LaunchedEffect(focusedRow, rows.size) { if (rows.isNotEmpty()) listState.animateScrollToItem(focusedRow) }
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        itemsIndexed(rows) { _, row ->
+            val focus = row.sessionIndex == state.selectedSessionIndex
+            val style = when (row.kind) {
+                "header" -> meta.copy(color = DimGreen, fontSize = 10.sp)
+                "action" -> body.copy(color = if (focus) Color.Black else Green, fontSize = 11.sp)
+                else -> body.copy(color = if (focus) Color.Black else Green, fontSize = 11.sp)
+            }
+            Text(
+                text = (if (focus) ">" else " ") + row.text,
+                style = style,
+                modifier = Modifier.fillMaxWidth()
+                    .background(if (focus) Green else Color.Transparent)
+                    .padding(horizontal = 1.dp, vertical = if (row.kind == "header") 2.dp else 1.dp),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip,
+            )
         }
     }
 }
 
-/** 模型 id 或别名 → 短名;组装 statusline 文本。tokens 以 k 显示。 */
+@Composable
+private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle) {
+    val terminal = state.terminal
+    val listState = rememberLazyListState()
+    val rawLines = terminal?.content?.split('\n') ?: emptyList()
+    val wrapped = remember(terminal?.content) { rawLines.flatMap { wrapTerminalLine(it) } }
+    val visibleCount = 36
+    val maxStart = (wrapped.size - visibleCount).coerceAtLeast(0)
+    val start = state.terminalScroll.coerceIn(0, maxStart)
+    val lines = wrapped.drop(start).take(visibleCount)
+    LaunchedEffect(terminal?.id, terminal?.content, state.terminalScroll) { listState.scrollToItem(0) }
+    Text(
+        "${toolCode(terminal?.tool ?: "AOE")} ${fitCell(terminal?.title ?: "", 21)} ${fitCell((terminal?.status ?: "").uppercase(), 6)} ${start + 1}/${wrapped.size.coerceAtLeast(1)}",
+        style = meta.copy(color = Green),
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+    )
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        itemsIndexed(lines) { _, line ->
+            Text(
+                line.ifEmpty { " " },
+                style = body.copy(fontSize = 9.sp),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AoeReplyMenu(state: HudState, body: TextStyle, meta: TextStyle) {
+    val opts = listOf("Voice dictation", "Text keyboard", "Cancel")
+    Column(Modifier.fillMaxSize().padding(top = 20.dp), horizontalAlignment = Alignment.Start) {
+        Text("REPLY TO ${state.terminal?.title ?: "SESSION"}", style = meta.copy(color = Green))
+        Spacer(Modifier.height(8.dp))
+        opts.forEachIndexed { i, opt ->
+            val focus = i == state.replyMenuIndex
+            Text(
+                (if (focus) ">" else " ") + opt,
+                style = body.copy(color = if (focus) Color.Black else Green, fontSize = 13.sp),
+                modifier = Modifier.fillMaxWidth().background(if (focus) Green else Color.Transparent).padding(2.dp),
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("↑↓ choose · ENTER confirm · BACK terminal", style = meta)
+    }
+}
+
+@Composable
+private fun AoeTextInput(state: HudState, body: TextStyle, meta: TextStyle) {
+    Column(Modifier.fillMaxSize().padding(top = 10.dp)) {
+        Text("TEXT REPLY", style = meta.copy(color = Green))
+        Spacer(Modifier.height(8.dp))
+        Text("> ${state.textInput.ifBlank { "_" }}", style = body.copy(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().background(Color.Black))
+        Spacer(Modifier.height(8.dp))
+        Text("BT keyboard: type · ENTER send · BACK cancel", style = meta)
+    }
+}
+
+@Composable
+private fun AoeNewSessionMenu(state: HudState, body: TextStyle, meta: TextStyle) {
+    val opts = listOf("Claude", "Codex", "Cancel")
+    Column(Modifier.fillMaxSize().padding(top = 20.dp)) {
+        Text("NEW SESSION", style = meta.copy(color = Green))
+        Spacer(Modifier.height(8.dp))
+        opts.forEachIndexed { i, opt ->
+            val focus = i == state.newSessionIndex
+            Text(
+                (if (focus) ">" else " ") + opt,
+                style = body.copy(color = if (focus) Color.Black else Green, fontSize = 13.sp),
+                modifier = Modifier.fillMaxWidth().background(if (focus) Green else Color.Transparent).padding(2.dp),
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("creates scratch session; web API/aoe add compatible", style = meta)
+    }
+}
+
+/** 模型 id 或别名 → 短名;组装 statusline 文本。 */
 fun shortModel(model: String?, s: Strings): String = when {
     model == null -> s.modelUnknown
     model.contains("opus", true) -> "opus"

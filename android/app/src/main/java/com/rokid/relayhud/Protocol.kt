@@ -12,6 +12,26 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 
 data class RunSummary(val id: String, val status: String, val prompt: String)
+data class AoeSessionSummary(
+    val id: String,
+    val title: String,
+    val tool: String,
+    val group: String,
+    val status: String,
+    val path: String,
+    val hasTerminal: Boolean,
+    val unread: Boolean,
+    val age: String,
+    val lastAccessedAt: String,
+)
+data class AoeTerminalSnapshot(
+    val id: String,
+    val title: String,
+    val tool: String,
+    val status: String,
+    val content: String,
+    val lines: Int,
+)
 
 sealed interface AgentEvent {
     data class System(val sessionId: String?) : AgentEvent
@@ -32,6 +52,9 @@ sealed interface ServerMessage {
     data class PermissionRequest(val id: String, val summary: String, val options: List<String>, val allowKey: String, val timeoutChoice: String) : ServerMessage
     data class Usage(val model: String?, val costUsd: Double, val tokens: Long) : ServerMessage
     data class ModelRequest(val id: String, val options: List<String>, val current: Int, val timeoutChoice: String) : ServerMessage
+    data class AoeSessions(val sessions: List<AoeSessionSummary>) : ServerMessage
+    data class AoeTerminal(val terminal: AoeTerminalSnapshot) : ServerMessage
+    data class AoeError(val message: String) : ServerMessage
     object Unknown : ServerMessage
 }
 
@@ -66,6 +89,28 @@ private fun parseEvent(o: JsonObject): AgentEvent = when (o.str("type")) {
     else -> AgentEvent.Unknown
 }
 
+private fun parseAoeSession(o: JsonObject): AoeSessionSummary = AoeSessionSummary(
+    id = o.str("id") ?: "",
+    title = o.str("title") ?: "",
+    tool = o.str("tool") ?: "agent",
+    group = o.str("group") ?: "",
+    status = o.str("status") ?: "",
+    path = o.str("path") ?: "",
+    hasTerminal = o.bool("hasTerminal") ?: false,
+    unread = o.bool("unread") ?: false,
+    age = o.str("age") ?: "",
+    lastAccessedAt = o.str("lastAccessedAt") ?: "",
+)
+
+private fun parseAoeTerminal(o: JsonObject): AoeTerminalSnapshot = AoeTerminalSnapshot(
+    id = o.str("id") ?: "",
+    title = o.str("title") ?: "",
+    tool = o.str("tool") ?: "agent",
+    status = o.str("status") ?: "",
+    content = o.str("content") ?: "",
+    lines = o.int("lines") ?: 0,
+)
+
 /** 解析中继 server→client 消息;任何异常/未知 → Unknown,不抛。 */
 fun parseServerMessage(text: String): ServerMessage = try {
     val o = json.parseToJsonElement(text).jsonObject
@@ -92,6 +137,15 @@ fun parseServerMessage(text: String): ServerMessage = try {
             val opts = (o["options"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
             ServerMessage.ModelRequest(o.str("id") ?: "", opts, o.int("current") ?: 0, o.str("timeoutChoice") ?: (opts.lastOrNull() ?: ""))
         }
+        "aoeSessions" -> {
+            val sessions = (o["sessions"] as? JsonArray)?.mapNotNull { (it as? JsonObject)?.let(::parseAoeSession) } ?: emptyList()
+            ServerMessage.AoeSessions(sessions)
+        }
+        "aoeTerminal" -> {
+            val terminal = (o["terminal"] as? JsonObject)?.let(::parseAoeTerminal) ?: AoeTerminalSnapshot("", "", "agent", "", "", 0)
+            ServerMessage.AoeTerminal(terminal)
+        }
+        "aoeError" -> ServerMessage.AoeError(o.str("message") ?: "")
         else -> ServerMessage.Unknown
     }
 } catch (_: Exception) {
