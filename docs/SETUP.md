@@ -42,9 +42,9 @@ ngrok tunnel.
    ```bash
    cp config.example.json config.json
    ```
-   - Same Wi-Fi LAN: set `"serverUrl": "ws://<your-Mac-LAN-IP>:8787"`.
-   - Or over USB only: run `adb reverse tcp:8787 tcp:8787` and use
-     `"serverUrl": "ws://localhost:8787"`.
+   - Same Wi-Fi LAN: set `"serverUrl": "ws://<your-Mac-LAN-IP>:8788"`.
+   - Or over USB only: run `adb reverse tcp:8788 tcp:8788` and use
+     `"serverUrl": "ws://localhost:8788"`.
    - Leave `"token": ""` for local (no auth).
    - `"lang": "zh"` or `"en"` sets the whole app language — UI, speech
      recognition, voice commands, and dictionary. Default is `zh`.
@@ -68,24 +68,24 @@ ngrok tunnel.
    ngrok config add-authtoken <your-ngrok-authtoken>
    ```
    A free static domain works well.
-2. **Create the relay environment file:**
-   ```bash
-   cp relay/.remote.env.example relay/.remote.env
-   ```
-   Fill in:
-   - `ROKID_TOKEN` — a long random secret, e.g. `openssl rand -hex 24`.
-   - `NGROK_DOMAIN` — your fixed ngrok domain (without the protocol), e.g.
-     `your-subdomain.ngrok-free.dev`.
-3. **Point the client at the tunnel.** In `config.json` set
-   `"serverUrl": "wss://<your-ngrok-domain>"` and `"token": "<same ROKID_TOKEN>"`,
-   then push it (same `adb push` command as above).
-4. **Start the remote stack:**
+2. **Start the remote stack:**
    ```bash
    ./start-remote.command
    ```
-   This launches ngrok plus the token-protected relay. When you're out of the
-   house, connect the glasses to your phone's hotspot and they reach the Mac
-   through the tunnel.
+   On first run the script creates `relay/.remote.env` with a random
+   `ROKID_TOKEN`. If you have a fixed ngrok domain, put it in `NGROK_DOMAIN`;
+   otherwise the script uses ngrok's temporary public URL.
+3. **Point the client at the tunnel.** The script writes
+   `config.remote.generated.json` plus `config.remote.qr.txt` (and
+   `config.remote.qr.png` when `qrencode` is installed). Use either:
+   ```bash
+   adb push config.remote.generated.json /sdcard/Android/data/com.rokid.relayhud/files/config.json
+   ```
+   or scan the `RCLAUDE:` config QR from the glasses while disconnected.
+
+This launches ngrok plus the token-protected relay. When you're out of the
+house, connect the glasses to your phone's hotspot and they reach the Mac
+through the tunnel.
 
 ### Security
 
@@ -163,7 +163,7 @@ glasses, so opening it mirrors the HUD — and because it sends its last positio
 on connect, the relay replays the **current run's history**, not just new
 output. You can also type prompts from the page.
 
-**Local mode:** run `./start.command`, then open **http://localhost:8787** in a
+**Local mode:** run `./start.command`, then open **http://localhost:8788** in a
 Mac browser — you'll see (and can drive) the same session as the glasses.
 
 Two limitations to know:
@@ -202,7 +202,7 @@ Two limitations to know:
 reachable. Locally, re-run `./start.command` (it sets up `adb reverse` and starts
 the relay). Remotely, check that `start-remote.command` is still running, the
 Mac is awake, and the glasses have internet. Confirm the relay is up with
-`lsof -iTCP:8787 -sTCP:LISTEN`.
+`lsof -iTCP:8788 -sTCP:LISTEN`.
 
 **Relay logs "Not logged in" / `apiKeySource:none`.** The spawned `claude` CLI
 isn't logged in. Run `claude` once interactively and `/login` (a desktop login is

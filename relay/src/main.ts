@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createRelayServer } from './server';
 import { runClaude } from './claude-runner';
@@ -8,8 +8,9 @@ import { runClaude } from './claude-runner';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-const PORT = 8787;
+const PORT = Number(process.env.ROKID_PORT ?? 8788);
 const token = process.env.ROKID_TOKEN;
+const claudeBinary = process.env.CLAUDE_BINARY;
 
 // 写一份含 PreToolUse hook 的 settings:写文件/Bash 类工具放行决定外包给中继(中继再问眼镜)。
 const hookScript = join(__dirname, 'permission-hook.mjs');
@@ -25,18 +26,23 @@ writeFileSync(settingsPath, JSON.stringify({
   },
 }));
 
+const sandboxDir = join(root, 'sandbox');
+const stateDir = join(root, 'state');
+mkdirSync(sandboxDir, { recursive: true });
+mkdirSync(stateDir, { recursive: true });
+
 const { http } = createRelayServer({
-  sandboxDir: join(root, 'sandbox'),
+  sandboxDir,
   webDir: join(root, 'web'),
-  stateDir: join(root, 'state'),
+  stateDir,
   modelPath: join(root, 'models', 'ggml-small.bin'),
   token,
   dictionaryDir: root,
-  runner: (o) => runClaude({ ...o, settingsPath }),
+  runner: (o) => runClaude({ ...o, binary: claudeBinary, settingsPath }),
 });
 
 http.listen(PORT, () => {
   console.log(`Rokid relay 已启动: http://localhost:${PORT}`);
   console.log(`鉴权: ${token ? '已开启 (ROKID_TOKEN)' : '未开启 (本地直连)'}`);
-  console.log(`sandbox: ${join(root, 'sandbox')} | state: ${join(root, 'state')}`);
+  console.log(`sandbox: ${sandboxDir} | state: ${stateDir}`);
 });

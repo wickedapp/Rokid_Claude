@@ -13,7 +13,7 @@ streaming the agent's events back to the client in real time.
 ```
 ┌─────────────┐   audio(PCM)/prompt    ┌──────────────────────┐   spawn   ┌──────────────┐
 │  Android    │ ─────────────────────► │  Relay (Node/TS)     │ ────────► │  claude -p   │
-│  client     │   WebSocket (ws/wss)   │  :8787               │ stream-   │  (Claude     │
+│  client     │   WebSocket (ws/wss)   │  :8788               │ stream-   │  (Claude     │
 │  (glasses/  │ ◄───────────────────── │  whisper.cpp STT     │  json     │   Code CLI)  │
 │   phone)    │   events / usage /     │  RunStore + replay   │ ◄──────── │              │
 │  green HUD  │   permission prompts   │  PreToolUse hook     │           └──────────────┘
@@ -113,7 +113,7 @@ run without prompting.
 ## Remote access
 
 For use outside the home, an [ngrok](https://ngrok.com) tunnel exposes the local
-relay (`:8787`) on a fixed domain over TLS. The relay requires a shared token
+relay (`:8788`) on a fixed domain over TLS. The relay requires a shared token
 (`?token=`) on every connection.
 
 **Security:** that token is equivalent to remote code execution on your Mac —

@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/2a4a304b-4600-4c17-8bcb-167e576b47e8
 ```
 ┌─────────────┐   audio(PCM)/prompt    ┌──────────────────────┐   spawn   ┌──────────────┐
 │  Android    │ ─────────────────────► │  Relay (Node/TS)     │ ────────► │  claude -p   │
-│  client     │   WebSocket (ws/wss)   │  :8787               │ stream-   │  (Claude     │
+│  client     │   WebSocket (ws/wss)   │  :8788               │ stream-   │  (Claude     │
 │  (glasses/  │ ◄───────────────────── │  whisper.cpp STT     │  json     │   Code CLI)  │
 │   phone)    │   events / usage /     │  RunStore + replay   │ ◄──────── │              │
 │  green HUD  │   permission prompts   │  PreToolUse hook     │           └──────────────┘

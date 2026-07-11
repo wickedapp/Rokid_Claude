@@ -9,7 +9,7 @@ import kotlinx.serialization.json.contentOrNull
 /** 眼镜 app 的连接配置。token 为空=本地直连不鉴权;lang=zh|en 决定全 app 语言。 */
 data class AppConfig(val serverUrl: String, val token: String, val lang: String = "zh")
 
-val DEFAULT_CONFIG = AppConfig(serverUrl = "ws://localhost:8787", token = "", lang = "zh")
+val DEFAULT_CONFIG = AppConfig(serverUrl = "ws://localhost:8788", token = "", lang = "zh")
 
 /** 解析 adb 推来的 config.json;为空/非法时回退本地默认。 */
 fun parseConfig(json: String?): AppConfig {
