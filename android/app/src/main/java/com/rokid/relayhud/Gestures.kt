@@ -22,3 +22,26 @@ object Gestures {
         }
     }
 }
+
+/**
+ * Rokid touchpad swipes emit a primary horizontal key followed by a trailing
+ * vertical key (RIGHT→DOWN or LEFT→UP). Both map to the same logical move, so
+ * coalesce only that different-key pair. Repeated presses of the same BT-key
+ * remain independent.
+ */
+class GestureDeduper(private val pairWindowMs: Long = 180L) {
+    private var lastAction: GestureAction? = null
+    private var lastKeyCode: Int = -1
+    private var lastAtMs: Long = Long.MIN_VALUE
+
+    fun shouldAccept(action: GestureAction, keyCode: Int, nowMs: Long): Boolean {
+        val duplicatePair = action != GestureAction.TAP &&
+            action == lastAction &&
+            keyCode != lastKeyCode &&
+            nowMs - lastAtMs in 0..pairWindowMs
+        lastAction = action
+        lastKeyCode = keyCode
+        lastAtMs = nowMs
+        return !duplicatePair
+    }
+}

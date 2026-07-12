@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
     @Volatile private var recording = false
     @Volatile private var running = false
     private var choiceState: ChoiceState? = null
+    private val gestureDeduper = GestureDeduper()
     private val countdown = Handler(Looper.getMainLooper())
     private var secondsLeft = 60
     private var choiceTimeoutDefault = ""
@@ -180,11 +181,13 @@ class MainActivity : ComponentActivity() {
             return true
         }  // 双击=终端页返回列表;列表页退出应用
         if (hud.mode == HudMode.AOE_TEXT_INPUT) return true
+        val gesture = Gestures.map(keyCode, android.view.KeyEvent.ACTION_UP)
+        if (gesture != null && !gestureDeduper.shouldAccept(gesture, keyCode, SystemClock.uptimeMillis())) return true
         // 选择模式优先截胡:前/后滑移动高亮,单击确认。
         val p = hud.choice
         val cs = choiceState
         if (p != null && cs != null) {
-            when (Gestures.map(keyCode, android.view.KeyEvent.ACTION_UP)) {
+            when (gesture) {
                 GestureAction.SCROLL_UP -> { cs.move(-1); hud.choice = p.copy(highlight = cs.highlight) }
                 GestureAction.SCROLL_DOWN -> { cs.move(1); hud.choice = p.copy(highlight = cs.highlight) }
                 GestureAction.TAP -> submitChoice(cs.confirm())
@@ -192,7 +195,7 @@ class MainActivity : ComponentActivity() {
             }
             return true
         }
-        return when (Gestures.map(keyCode, android.view.KeyEvent.ACTION_UP)) {
+        return when (gesture) {
             GestureAction.TAP -> { onTap(); true }
             GestureAction.SCROLL_UP -> {
                 if (hud.mode == HudMode.AOE_SESSIONS) hud.moveSession(-1) else hud.scroll(-1)
