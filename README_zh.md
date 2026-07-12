@@ -97,10 +97,35 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 export ANDROID_HOME="$HOME/Library/Android/sdk"
 ```
 
+## 外出使用 / Remote AoE
+
+离开同一局域网、也没有 ADB 线时,不要继续使用 `ws://localhost:8788`。运行：
+
+```bash
+./start-remote.command
+```
+
+脚本会自动：
+
+1. 生成或复用 `relay/.remote.env` 内的 `ROKID_TOKEN`
+2. 以 token 鉴权启动本机 relay `:8788`
+3. 启动 ngrok 隧道;也可用 `TUNNEL_PROVIDER=cloudflare ./start-remote.command`
+4. 生成 `config.remote.generated.json`、`config.remote.qr.txt`、可选 `config.remote.qr.png`
+5. 用 WebSocket `hello → sync` 做一次远端握手 smoke test
+
+眼镜端断线时单击进入 QR scanner,扫描 `config.remote.qr.png` 后会写入：
+
+```text
+RCLAUDE:url=wss://...;token=...;lang=zh
+```
+
+之后只要 Mac、AoE 和 relay/tunnel 都在线,眼镜在外网 Wi-Fi 下也能看 AoE sessions。
+用完在脚本窗口按 `Ctrl+C`,会关闭本次 relay/tunnel。
+
 ## 安全
 
-中继会在你 Mac 上运行 Claude Code,所以它的访问 token = 在你机器上远程执行代码的
-权限。把 `relay/.remote.env` 和你真实的 `config.json` 留在 git 之外(两者都已
+中继会在你 Mac 上运行 Claude Code / AoE / Codex,所以它的访问 token = 在你机器上远程执行代码的
+权限。把 `relay/.remote.env`、`config.remote.*` 和你真实的 `config.json` 留在 git 之外(这些都已
 gitignore),没有 token 时绝不把中继裸暴露公网,并把眼镜端的权限确认当作第二道
 防线。
 

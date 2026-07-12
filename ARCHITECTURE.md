@@ -112,12 +112,26 @@ run without prompting.
 
 ## Remote access
 
-For use outside the home, an [ngrok](https://ngrok.com) tunnel exposes the local
-relay (`:8788`) on a fixed domain over TLS. The relay requires a shared token
-(`?token=`) on every connection.
+Outside the home/LAN, the glasses must not keep using `ws://localhost:8788`
+(that only works through USB `adb reverse`). Run:
+
+```bash
+./start-remote.command
+```
+
+The script starts the local relay with `ROKID_TOKEN`, opens a public WSS tunnel
+(default: ngrok; `TUNNEL_PROVIDER=cloudflare` also works), writes
+`config.remote.generated.json` plus a `RCLAUDE:` QR payload, and performs a real
+WebSocket `hello → sync` smoke test through the public URL before declaring the
+setup ready. The glasses can scan the generated QR from the offline scanner and
+will reconnect to `wss://.../?token=...`.
+
+For use outside the home, the Mac must remain on with AoE plus the relay/tunnel
+running. Stop the script with `Ctrl+C` when finished; it tears down the relay and
+tunnel processes started by that run.
 
 **Security:** that token is equivalent to remote code execution on your Mac —
-anyone who can reach the tunnel with the token can make Claude Code run commands.
-Keep it secret, never commit it, and rely on the on-glasses permission
-confirmation as a second line of defense. Never expose the relay publicly without
-a token.
+anyone who can reach the tunnel with the token can make AoE / Claude Code / Codex
+run commands. Keep it secret, never commit generated `config.remote.*` files, and
+rely on the on-glasses permission confirmation as a second line of defense. Never
+expose the relay publicly without a token.
