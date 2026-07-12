@@ -10,6 +10,7 @@ import android.provider.Settings
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity() {
                     hud.setAoeSessions(msg.sessions)
                 } else if (msg is ServerMessage.AoeTerminal) {
                     hud.showTerminal(msg.terminal)
+                    Log.i("RokidAoE", "terminal=${msg.terminal.id} defaultBottom=${hud.terminalScroll} contentLines=${msg.terminal.content.lineSequence().count()}")
                 } else if (msg is ServerMessage.AoeError) {
                     hud.status = "AOE error"
                     hud.add("AOE: ${msg.message}", Color(0xFFFF5555))
@@ -174,8 +176,9 @@ class MainActivity : ComponentActivity() {
         }
         if (keyCode == android.view.KeyEvent.KEYCODE_BACK) {
             if (handleAoeBack()) return true
-            setBlanked(true); return true
-        }  // 双击=终端页返回列表;列表页主动灭屏
+            finishAndRemoveTask()
+            return true
+        }  // 双击=终端页返回列表;列表页退出应用
         if (hud.mode == HudMode.AOE_TEXT_INPUT) return true
         // 选择模式优先截胡:前/后滑移动高亮,单击确认。
         val p = hud.choice

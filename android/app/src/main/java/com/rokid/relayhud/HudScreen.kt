@@ -75,11 +75,15 @@ class HudState {
     }
 
     fun setAoeSessions(items: List<AoeSessionSummary>) {
-        aoeSessions.clear(); aoeSessions.addAll(items)
+        // The visible AoE sidebar is grouped, so selection indices must follow that same
+        // grouped order. Keeping the original recency indices made DPAD jump from the
+        // first Valetax rows to Halley and left later Valetax rows unreachable.
+        val ordered = groupSessionsForDisplay(items)
+        aoeSessions.clear(); aoeSessions.addAll(ordered)
         if (selectedSessionIndex >= aoeSessions.size) selectedSessionIndex = (aoeSessions.size - 1).coerceAtLeast(0)
         if (mode != HudMode.AOE_TERMINAL && mode != HudMode.AOE_REPLY_MENU && mode != HudMode.AOE_TEXT_INPUT) mode = HudMode.AOE_SESSIONS
-        val clde = items.count { it.tool.contains("claude", true) }
-        val cdex = items.count { it.tool.contains("codex", true) }
+        val clde = ordered.count { it.tool.contains("claude", true) }
+        val cdex = ordered.count { it.tool.contains("codex", true) }
         status = "aoe - Recent   CLDE $clde  CDEX $cdex"
     }
 
@@ -92,7 +96,7 @@ class HudState {
     fun showTerminal(snapshot: AoeTerminalSnapshot) {
         terminal = snapshot
         activeSessionId = snapshot.id
-        terminalScroll = 0
+        terminalScroll = terminalBottomStart(snapshot.content)
         mode = HudMode.AOE_TERMINAL
         status = "${snapshot.tool.uppercase()} / ${snapshot.title} / ${snapshot.status.uppercase()}"
     }
@@ -140,7 +144,7 @@ fun HudScreen(state: HudState, connStatus: String, s: Strings, connected: Boolea
                 HudMode.AOE_TERMINAL -> "↑↓ SCROLL  ENTER REPLY  BACK SESSIONS"
                 HudMode.AOE_REPLY_MENU, HudMode.AOE_NEW_SESSION_MENU -> "↑↓ CHOOSE  ENTER OK  BACK CANCEL"
                 HudMode.AOE_TEXT_INPUT -> "TYPE TEXT  ENTER SEND  BACK CANCEL"
-                else -> "↑↓ MOVE  ENTER OPEN/NEW  BACK OFF"
+                else -> "↑↓ MOVE  ENTER OPEN/NEW  BACK EXIT"
             }
             Text(
                 if (connected) footer else s.offlineHint,
@@ -210,7 +214,10 @@ private fun sessionRows(sessions: List<AoeSessionSummary>): List<SessionDisplayR
     return rows
 }
 
-private fun wrapTerminalLine(line: String, width: Int = 46): List<String> {
+internal fun groupSessionsForDisplay(sessions: List<AoeSessionSummary>): List<AoeSessionSummary> =
+    sessions.groupBy { it.group.ifBlank { "Scratch" } }.values.flatten()
+
+internal fun wrapTerminalLine(line: String, width: Int = 46): List<String> {
     val clean = line.replace('\t', ' ').replace('\u001B'.toString(), "")
     if (clean.isEmpty()) return listOf(" ")
     val out = mutableListOf<String>()
@@ -221,6 +228,11 @@ private fun wrapTerminalLine(line: String, width: Int = 46): List<String> {
     }
     out += rest
     return out
+}
+
+internal fun terminalBottomStart(content: String, visibleCount: Int = 36): Int {
+    val wrappedCount = content.split('\n').sumOf { wrapTerminalLine(it).size }
+    return (wrappedCount - visibleCount).coerceAtLeast(0)
 }
 
 @Composable
