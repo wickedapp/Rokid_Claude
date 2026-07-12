@@ -40,4 +40,13 @@ class AoeHudNavigationTest {
     @Test fun shortTerminalStartsAtTop() {
         assertEquals(0, terminalBottomStart("one\ntwo", visibleCount = 36))
     }
+
+    @Test fun terminalWrapsAtWordBoundaryWhenPossible() {
+        assertEquals(listOf("hello", "admin"), wrapTerminalLine("hello admin", width = 7))
+        assertEquals(listOf("prefix", "admin user"), wrapTerminalLine("prefix admin user", width = 10))
+    }
+
+    @Test fun terminalOnlySplitsLongUnbrokenTokens() {
+        assertEquals(listOf("super", "long"), wrapTerminalLine("superlong", width = 5))
+    }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 val Green = Color(0xFF00FF00)
 val DimGreen = Color(0xFF7CE07C)
 val FocusBg = Color(0x3328FF48)
+private const val TERMINAL_VISIBLE_LINES = 36
 
 data class HudLine(val text: String, val color: Color = Green)
 enum class HudMode { AOE_SESSIONS, AOE_TERMINAL, AOE_REPLY_MENU, AOE_TEXT_INPUT, AOE_NEW_SESSION_MENU }
@@ -94,25 +95,32 @@ class HudState {
     }
 
     fun showTerminal(snapshot: AoeTerminalSnapshot) {
+        val previous = terminal
+        val sameSession = previous?.id == snapshot.id
+        val shouldFollowBottom = !sameSession || mode != HudMode.AOE_TERMINAL || terminalAtBottom()
         terminal = snapshot
         activeSessionId = snapshot.id
-        terminalScroll = terminalBottomStart(snapshot.content)
+        terminalScroll = if (shouldFollowBottom) {
+            terminalBottomStart(snapshot.content)
+        } else {
+            terminalScroll.coerceIn(0, terminalBottomStart(snapshot.content))
+        }
         mode = HudMode.AOE_TERMINAL
         status = "${snapshot.tool.uppercase()} / ${snapshot.title} / ${snapshot.status.uppercase()}"
     }
 
     fun terminalLooksInteractive(): Boolean {
-        val text = terminal?.content?.takeLast(5000)?.lowercase() ?: return false
+        val text = terminal?.content?.takeLast(1500)?.lowercase() ?: return false
         return listOf(
             "❯", "›", "use arrow", "arrow keys", "press enter", "enter to",
-            "do you want", "would you like", "choose", "select", "options",
-            "yes", "no", "allow", "deny", "continue", "proceed"
+            "do you want", "would you like", "choose an option", "select an option",
+            "❯ 1", "❯ yes", "❯ no"
         ).any { text.contains(it) }
     }
 
     fun terminalAtBottom(): Boolean {
         val content = terminal?.content ?: return true
-        val maxStart = (content.split('\n').sumOf { wrapTerminalLine(it).size } - 36).coerceAtLeast(0)
+        val maxStart = terminalBottomStart(content)
         return terminalScroll >= maxStart - 1
     }
 
@@ -140,7 +148,7 @@ fun HudScreen(state: HudState, connStatus: String, s: Strings, connected: Boolea
     val meta = TextStyle(color = DimGreen, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
 
     Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 30.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 30.dp)) {
             Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("AOE TERM", style = meta.copy(color = Green), maxLines = 1, softWrap = false)
                 Text(connStatus.uppercase(), style = meta, maxLines = 1, softWrap = false)
@@ -156,7 +164,7 @@ fun HudScreen(state: HudState, connStatus: String, s: Strings, connected: Boolea
                 }
             }
             val footer = when (state.mode) {
-                HudMode.AOE_TERMINAL -> if (state.terminalLooksInteractive() || state.terminalAtBottom()) "↑↓ TERM  ENTER SEND  TYPE INPUT  BACK SESSIONS" else "↑↓ SCROLL  ENTER REPLY  BACK SESSIONS"
+                HudMode.AOE_TERMINAL -> if (state.terminalLooksInteractive()) "↑↓ SELECT  ENTER SEND  TYPE INPUT  BACK SESSIONS" else "↑↓ SCROLL  ENTER REPLY  BACK SESSIONS"
                 HudMode.AOE_REPLY_MENU, HudMode.AOE_NEW_SESSION_MENU -> "↑↓ CHOOSE  ENTER OK  BACK CANCEL"
                 HudMode.AOE_TEXT_INPUT -> "TYPE TEXT  ENTER SEND  BACK CANCEL"
                 else -> "↑↓ MOVE  ENTER OPEN/NEW  BACK EXIT"
@@ -232,22 +240,34 @@ private fun sessionRows(sessions: List<AoeSessionSummary>): List<SessionDisplayR
 internal fun groupSessionsForDisplay(sessions: List<AoeSessionSummary>): List<AoeSessionSummary> =
     sessions.groupBy { it.group.ifBlank { "Scratch" } }.values.flatten()
 
-internal fun wrapTerminalLine(line: String, width: Int = 46): List<String> {
+internal fun terminalRows(content: String): List<String> =
+    content.split('\n').map { it.replace('\t', ' ').replace('\u001B'.toString(), "").trimEnd() }
+
+internal fun wrapTerminalLine(line: String, width: Int = 64): List<String> {
+    // Unit-test helper / fallback only. The live Terminal View renders AoE terminal
+    // rows directly and does not reflow them in Android.
     val clean = line.replace('\t', ' ').replace('\u001B'.toString(), "")
     if (clean.isEmpty()) return listOf(" ")
     val out = mutableListOf<String>()
     var rest = clean
     while (rest.length > width) {
-        out += rest.take(width)
-        rest = "  " + rest.drop(width).trimStart()
+        val window = rest.take(width + 1)
+        val breakAt = window.dropLast(1).indexOfLast { it.isWhitespace() }
+        if (breakAt > 0) {
+            out += rest.take(breakAt).trimEnd()
+            rest = rest.drop(breakAt + 1).trimStart()
+        } else {
+            out += rest.take(width)
+            rest = rest.drop(width).trimStart()
+        }
     }
     out += rest
     return out
 }
 
-internal fun terminalBottomStart(content: String, visibleCount: Int = 36): Int {
-    val wrappedCount = content.split('\n').sumOf { wrapTerminalLine(it).size }
-    return (wrappedCount - visibleCount).coerceAtLeast(0)
+internal fun terminalBottomStart(content: String, visibleCount: Int = TERMINAL_VISIBLE_LINES): Int {
+    val count = terminalRows(content).size
+    return (count - visibleCount).coerceAtLeast(0)
 }
 
 @Composable
@@ -282,15 +302,14 @@ private fun AoeSessionList(state: HudState, body: TextStyle, meta: TextStyle) {
 private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle) {
     val terminal = state.terminal
     val listState = rememberLazyListState()
-    val rawLines = terminal?.content?.split('\n') ?: emptyList()
-    val wrapped = remember(terminal?.content) { rawLines.flatMap { wrapTerminalLine(it) } }
-    val visibleCount = 36
-    val maxStart = (wrapped.size - visibleCount).coerceAtLeast(0)
+    val rows = remember(terminal?.content) { terminal?.content?.let { terminalRows(it) } ?: emptyList() }
+    val visibleCount = TERMINAL_VISIBLE_LINES
+    val maxStart = (rows.size - visibleCount).coerceAtLeast(0)
     val start = state.terminalScroll.coerceIn(0, maxStart)
-    val lines = wrapped.drop(start).take(visibleCount)
+    val lines = rows.drop(start).take(visibleCount)
     LaunchedEffect(terminal?.id, terminal?.content, state.terminalScroll) { listState.scrollToItem(0) }
     Text(
-        "${toolCode(terminal?.tool ?: "AOE")} ${fitCell(terminal?.title ?: "", 21)} ${fitCell((terminal?.status ?: "").uppercase(), 6)} ${start + 1}/${wrapped.size.coerceAtLeast(1)}",
+        "${toolCode(terminal?.tool ?: "AOE")} ${fitCell(terminal?.title ?: "", 21)} ${fitCell((terminal?.status ?: "").uppercase(), 6)} ${start + 1}/${rows.size.coerceAtLeast(1)}",
         style = meta.copy(color = Green),
         maxLines = 1,
         softWrap = false,
@@ -300,7 +319,7 @@ private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle) {
         itemsIndexed(lines) { _, line ->
             Text(
                 line.ifEmpty { " " },
-                style = body.copy(fontSize = 9.sp),
+                style = body.copy(fontSize = 6.sp),
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Clip,

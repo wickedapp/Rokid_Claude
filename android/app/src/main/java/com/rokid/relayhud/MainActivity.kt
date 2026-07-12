@@ -211,13 +211,13 @@ class MainActivity : ComponentActivity() {
         return when (gesture) {
             GestureAction.TAP -> { onTap(); true }
             GestureAction.SCROLL_UP -> {
-                if (hud.mode == HudMode.AOE_TERMINAL && (hud.terminalLooksInteractive() || hud.terminalAtBottom())) client.sendAoeTerminalKey("up")
+                if (hud.mode == HudMode.AOE_TERMINAL && hud.terminalLooksInteractive()) client.sendAoeTerminalKey("up")
                 else if (hud.mode == HudMode.AOE_SESSIONS) hud.moveSession(-1)
                 else hud.scroll(-1)
                 true
             }
             GestureAction.SCROLL_DOWN -> {
-                if (hud.mode == HudMode.AOE_TERMINAL && (hud.terminalLooksInteractive() || hud.terminalAtBottom())) client.sendAoeTerminalKey("down")
+                if (hud.mode == HudMode.AOE_TERMINAL && hud.terminalLooksInteractive()) client.sendAoeTerminalKey("down")
                 else if (hud.mode == HudMode.AOE_SESSIONS) hud.moveSession(1)
                 else hud.scroll(1)
                 true
@@ -306,7 +306,7 @@ class MainActivity : ComponentActivity() {
                 return
             }
             HudMode.AOE_TERMINAL -> {
-                if (hud.terminalLooksInteractive() || hud.terminalAtBottom()) client.sendAoeTerminalKey("enter")
+                if (hud.terminalLooksInteractive()) client.sendAoeTerminalKey("enter")
                 else hud.enterReplyMenu()
                 return
             }
