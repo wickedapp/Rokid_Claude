@@ -178,6 +178,7 @@ export function createRelayServer(opts: ServerOptions) {
         lines,
         cols: 52,
         rows: 28,
+        heartbeatMs: 1000,
         onFrame: (terminal) => send({ type: 'aoeTerminal', terminal }),
         onError: (err) => send({ type: 'aoeError', message: err.message, sessionId }),
       }).then((watch) => { aoeWatch = watch; }).catch((err) => {

@@ -297,6 +297,7 @@ export async function watchAoeTerminal(
     lines?: number;
     cols?: number;
     rows?: number;
+    heartbeatMs?: number;
     onFrame: (terminal: AoeTerminalFrame) => void;
     onError: (err: Error) => void;
   },
@@ -319,8 +320,8 @@ export async function watchAoeTerminal(
   let closed = false;
   let captureInFlight = false;
   let capturePending = false;
-  let lastSentContent = meta.content;
   const ws = new WebSocket(wsUrl, ['aoe-auth', token]);
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
 
   const sendCapturedTerminal = (history = 0) => {
     if (closed) return;
@@ -329,15 +330,12 @@ export async function watchAoeTerminal(
     captureAoeSession(id, opts.lines ?? 300)
       .then((latest) => {
         if (closed) return;
-        if (latest.content !== lastSentContent) {
-          lastSentContent = latest.content;
-          opts.onFrame({
-            ...latest,
-            lines: opts.lines ?? latest.lines,
-            rows: opts.rows ?? 28,
-            history,
-          });
-        }
+        opts.onFrame({
+          ...latest,
+          lines: opts.lines ?? latest.lines,
+          rows: opts.rows ?? 28,
+          history,
+        });
       })
       .catch((err) => opts.onError(err instanceof Error ? err : new Error(String(err))))
       .finally(() => {
@@ -353,6 +351,8 @@ export async function watchAoeTerminal(
     ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 52, rows: opts.rows ?? 28 }));
     ws.send(JSON.stringify({ type: 'window', lines: opts.lines ?? 300 }));
     ws.send(JSON.stringify({ type: 'cadence', fast: true }));
+    sendCapturedTerminal(0);
+    heartbeat = setInterval(() => sendCapturedTerminal(0), opts.heartbeatMs ?? 1000);
   });
   ws.on('message', (data) => {
     if (closed) return;
@@ -374,7 +374,7 @@ export async function watchAoeTerminal(
   });
 
   return {
-    stop() { closed = true; try { ws.close(1000); } catch { ws.terminate(); } },
+    stop() { closed = true; if (heartbeat) clearInterval(heartbeat); try { ws.close(1000); } catch { ws.terminate(); } },
     sendInput(input: string) { if (!closed && ws.readyState === WebSocket.OPEN) ws.send(input); },
     sendKey(key: string) { if (!closed && ws.readyState === WebSocket.OPEN) ws.send(terminalKeyInput(key)); },
   };
