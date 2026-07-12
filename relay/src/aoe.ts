@@ -227,6 +227,9 @@ export async function watchAoeTerminal(
   const httpUrl = new URL(baseUrl);
   const wsProtocol = httpUrl.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${wsProtocol}//${httpUrl.host}/sessions/${encodeURIComponent(id)}/terminal/live-ws?index=0`;
+  const baseLines = meta.content.split('\n');
+  let scrollbackHead = baseLines.slice(0, Math.max(0, baseLines.length - (opts.rows ?? 36)));
+  let lastFrameLines = opts.rows ?? 36;
   let closed = false;
   const ws = new WebSocket(wsUrl, ['aoe-auth', token]);
 
@@ -240,11 +243,29 @@ export async function watchAoeTerminal(
     try {
       const msg = JSON.parse(data.toString()) as { type?: string; content?: string; rows?: number; history?: number };
       if (msg.type !== 'frame') return;
+      const frameContent = stripAnsi(msg.content ?? '');
+      const rawFrameLines = frameContent.split('\n');
+      const firstContent = rawFrameLines.findIndex((line) => line.trim().length > 0);
+      let lastContent = -1;
+      for (let i = rawFrameLines.length - 1; i >= 0; i -= 1) {
+        if (rawFrameLines[i]?.trim().length) { lastContent = i; break; }
+      }
+      const frameLines = firstContent >= 0 ? rawFrameLines.slice(firstContent, lastContent + 1) : rawFrameLines;
+      const nonBlank = frameLines.some((line) => line.trim().length > 0);
+      if (!nonBlank && meta.content.trim()) return;
+      const rows = typeof msg.rows === 'number' && msg.rows > 0 ? msg.rows : (opts.rows ?? 36);
+      if (scrollbackHead.length + lastFrameLines > baseLines.length) {
+        scrollbackHead = [...scrollbackHead, ...frameLines].slice(0, Math.max(0, (opts.lines ?? 120) - rows));
+      }
+      lastFrameLines = frameLines.length;
+      const mergedContent = meta.content.trim()
+        ? [...scrollbackHead, ...frameLines].join('\n')
+        : frameContent;
       opts.onFrame({
         ...meta,
-        content: stripAnsi(msg.content ?? ''),
+        content: mergedContent,
         lines: opts.lines ?? meta.lines,
-        rows: typeof msg.rows === 'number' ? msg.rows : 0,
+        rows,
         history: typeof msg.history === 'number' ? msg.history : 0,
       });
     } catch (err) {
