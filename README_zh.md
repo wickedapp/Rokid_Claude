@@ -99,7 +99,9 @@ export ANDROID_HOME="$HOME/Library/Android/sdk"
 
 ## 外出使用 / Remote AoE
 
-离开同一局域网、也没有 ADB 线时,不要继续使用 `ws://localhost:8788`。运行：
+离开同一局域网、也没有 ADB 线时,不要继续使用 `ws://localhost:8788`。
+
+### 临时测试：ngrok / quick tunnel
 
 ```bash
 ./start-remote.command
@@ -109,18 +111,60 @@ export ANDROID_HOME="$HOME/Library/Android/sdk"
 
 1. 生成或复用 `relay/.remote.env` 内的 `ROKID_TOKEN`
 2. 以 token 鉴权启动本机 relay `:8788`
-3. 启动 ngrok 隧道;也可用 `TUNNEL_PROVIDER=cloudflare ./start-remote.command`
+3. 启动临时 ngrok 隧道；也可用 `TUNNEL_PROVIDER=cloudflare ./start-remote.command`
 4. 生成 `config.remote.generated.json`、`config.remote.qr.txt`、可选 `config.remote.qr.png`
 5. 用 WebSocket `hello → sync` 做一次远端握手 smoke test
+
+临时隧道适合测试，但 URL 可能变化，不适合作为长期方案。
+
+### 长期稳定方案：Cloudflare named tunnel + launchd
+
+本机已配置稳定入口：
+
+```text
+wss://rokid-aoe.wickedapp.xyz
+```
+
+对应的 macOS LaunchAgents：
+
+```text
+com.rokid.aoe-serve       # 启动 aoe serve :8790
+com.rokid.relay           # 启动 token-protected Rokid relay :8788
+com.cloudflare.rokid-aoe  # Cloudflare named tunnel → localhost:8788
+```
+
+它们设置了 `RunAtLoad` + `KeepAlive`，用户登录后会自动启动，进程退出也会自动拉起。配置文件位置：
+
+```text
+~/Library/LaunchAgents/com.rokid.aoe-serve.plist
+~/Library/LaunchAgents/com.rokid.relay.plist
+~/Library/LaunchAgents/com.cloudflare.rokid-aoe.plist
+~/.cloudflared/rokid-aoe.yml
+```
+
+状态检查：
+
+```bash
+launchctl list | grep -E 'com\.rokid\.|com\.cloudflare\.rokid-aoe'
+lsof -nP -iTCP:8788 -sTCP:LISTEN
+lsof -nP -iTCP:8790 -sTCP:LISTEN
+```
+
+日志：
+
+```text
+/tmp/rokid-aoe-serve.log
+/tmp/rokid-relay.log
+/tmp/cloudflared-rokid-aoe.err.log
+```
 
 眼镜端断线时单击进入 QR scanner,扫描 `config.remote.qr.png` 后会写入：
 
 ```text
-RCLAUDE:url=wss://...;token=...;lang=zh
+RCLAUDE:url=wss://rokid-aoe.wickedapp.xyz;token=...;lang=zh
 ```
 
-之后只要 Mac、AoE 和 relay/tunnel 都在线,眼镜在外网 Wi-Fi 下也能看 AoE sessions。
-用完在脚本窗口按 `Ctrl+C`,会关闭本次 relay/tunnel。
+之后只要 Mac 在线且用户已登录，眼镜在外网 Wi-Fi 下也能看 AoE sessions。
 
 ## 安全
 
