@@ -22,8 +22,8 @@ import androidx.compose.ui.unit.sp
 val Green = Color(0xFF00FF00)
 val DimGreen = Color(0xFF7CE07C)
 val FocusBg = Color(0x3328FF48)
-private const val TERMINAL_VISIBLE_LINES = 28
-private const val TERMINAL_DISPLAY_WIDTH = 52
+private const val TERMINAL_VISIBLE_LINES = 35
+private const val TERMINAL_DISPLAY_WIDTH = 76
 
 data class HudLine(val text: String, val color: Color = Green)
 enum class HudMode { AOE_SESSIONS, AOE_TERMINAL, AOE_REPLY_MENU, AOE_TEXT_INPUT, AOE_NEW_SESSION_MENU }
@@ -249,6 +249,7 @@ internal fun groupSessionsForDisplay(sessions: List<AoeSessionSummary>): List<Ao
 internal fun terminalRows(content: String): List<String> =
     content.split('\n')
         .flatMap { wrapTerminalLine(it.replace('\t', ' ').replace('\u001B'.toString(), "").trimEnd(), TERMINAL_DISPLAY_WIDTH) }
+        .dropLastWhile { it.isBlank() }
 
 internal fun wrapTerminalLine(line: String, width: Int = 64): List<String> {
     // Keep each real terminal row as its own paragraph, but wrap that row inside
@@ -315,7 +316,8 @@ private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle) {
     val visibleCount = TERMINAL_VISIBLE_LINES
     val maxStart = (rows.size - visibleCount).coerceAtLeast(0)
     val start = state.terminalScroll.coerceIn(0, maxStart)
-    val lines = rows.drop(start).take(visibleCount)
+    val windowLines = rows.drop(start).take(visibleCount)
+    val lines = if (windowLines.size < visibleCount) List(visibleCount - windowLines.size) { "" } + windowLines else windowLines
     LaunchedEffect(terminal?.id, terminal?.content, state.terminalScroll) { listState.scrollToItem(0) }
     Text(
         "${toolCode(terminal?.tool ?: "AOE")} ${fitCell(terminal?.title ?: "", 21)} ${fitCell((terminal?.status ?: "").uppercase(), 6)} ${start + 1}/${rows.size.coerceAtLeast(1)}",
@@ -328,7 +330,8 @@ private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle) {
         itemsIndexed(lines) { _, line ->
             Text(
                 line.ifEmpty { " " },
-                style = body.copy(fontSize = 6.sp),
+                modifier = Modifier.fillMaxWidth(),
+                style = body.copy(fontSize = 8.sp),
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Clip,

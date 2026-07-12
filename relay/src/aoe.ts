@@ -333,7 +333,7 @@ export async function watchAoeTerminal(
         opts.onFrame({
           ...latest,
           lines: opts.lines ?? latest.lines,
-          rows: opts.rows ?? 28,
+          rows: opts.rows ?? 35,
           history,
         });
       })
@@ -348,7 +348,7 @@ export async function watchAoeTerminal(
   };
 
   ws.on('open', () => {
-    ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 52, rows: opts.rows ?? 28 }));
+    ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 76, rows: opts.rows ?? 35 }));
     ws.send(JSON.stringify({ type: 'window', lines: opts.lines ?? 300 }));
     ws.send(JSON.stringify({ type: 'cadence', fast: true }));
     sendCapturedTerminal(0);
