@@ -350,7 +350,7 @@ export async function watchAoeTerminal(
   };
 
   ws.on('open', () => {
-    ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 72, rows: opts.rows ?? 28 }));
+    ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 52, rows: opts.rows ?? 28 }));
     ws.send(JSON.stringify({ type: 'window', lines: opts.lines ?? 300 }));
     ws.send(JSON.stringify({ type: 'cadence', fast: true }));
   });

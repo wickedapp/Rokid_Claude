@@ -23,6 +23,7 @@ val Green = Color(0xFF00FF00)
 val DimGreen = Color(0xFF7CE07C)
 val FocusBg = Color(0x3328FF48)
 private const val TERMINAL_VISIBLE_LINES = 28
+private const val TERMINAL_DISPLAY_WIDTH = 52
 
 data class HudLine(val text: String, val color: Color = Green)
 enum class HudMode { AOE_SESSIONS, AOE_TERMINAL, AOE_REPLY_MENU, AOE_TEXT_INPUT, AOE_NEW_SESSION_MENU }
@@ -48,7 +49,8 @@ class HudState {
     var replyMenuIndex by mutableStateOf(0)
     var newSessionIndex by mutableStateOf(0)
     var textInput by mutableStateOf("")
-    var terminalScroll by mutableStateOf(0)
+    var terminalScroll by mutableIntStateOf(0)
+    var terminalFollowBottom by mutableStateOf(true)
         private set
     var status by mutableStateOf("")
     val toolIndex = mutableMapOf<String, Int>()
@@ -97,13 +99,14 @@ class HudState {
     fun showTerminal(snapshot: AoeTerminalSnapshot) {
         val previous = terminal
         val sameSession = previous?.id == snapshot.id
-        val shouldFollowBottom = !sameSession || mode != HudMode.AOE_TERMINAL || terminalAtBottom()
+        if (!sameSession || mode != HudMode.AOE_TERMINAL) terminalFollowBottom = true
         terminal = snapshot
         activeSessionId = snapshot.id
-        terminalScroll = if (shouldFollowBottom) {
-            terminalBottomStart(snapshot.content)
+        val bottom = terminalBottomStart(snapshot.content)
+        terminalScroll = if (terminalFollowBottom) {
+            bottom
         } else {
-            terminalScroll.coerceIn(0, terminalBottomStart(snapshot.content))
+            terminalScroll.coerceIn(0, bottom)
         }
         mode = HudMode.AOE_TERMINAL
         status = "${snapshot.tool.uppercase()} / ${snapshot.title} / ${snapshot.status.uppercase()}"
@@ -125,7 +128,11 @@ class HudState {
 
     fun scroll(dir: Int) {
         when (mode) {
-            HudMode.AOE_TERMINAL -> terminalScroll = (terminalScroll + dir).coerceIn(0, 10000)
+            HudMode.AOE_TERMINAL -> {
+                val bottom = terminalBottomStart(terminal?.content ?: "")
+                terminalScroll = (terminalScroll + dir).coerceIn(0, bottom)
+                terminalFollowBottom = terminalScroll >= bottom
+            }
             HudMode.AOE_REPLY_MENU -> replyMenuIndex = (replyMenuIndex + dir).coerceIn(0, 2)
             HudMode.AOE_NEW_SESSION_MENU -> newSessionIndex = (newSessionIndex + dir).coerceIn(0, 2)
             else -> { scrollDir = dir; scrollTick++ }
@@ -240,11 +247,14 @@ internal fun groupSessionsForDisplay(sessions: List<AoeSessionSummary>): List<Ao
     sessions.groupBy { it.group.ifBlank { "Scratch" } }.values.flatten()
 
 internal fun terminalRows(content: String): List<String> =
-    content.split('\n').map { it.replace('\t', ' ').replace('\u001B'.toString(), "").trimEnd() }
+    content.split('\n')
+        .flatMap { wrapTerminalLine(it.replace('\t', ' ').replace('\u001B'.toString(), "").trimEnd(), TERMINAL_DISPLAY_WIDTH) }
 
 internal fun wrapTerminalLine(line: String, width: Int = 64): List<String> {
-    // Unit-test helper / fallback only. The live Terminal View renders AoE terminal
-    // rows directly and does not reflow them in Android.
+    // Keep each real terminal row as its own paragraph, but wrap that row inside
+    // the Rokid-safe display width so the right edge is never clipped. We do not
+    // join neighboring terminal rows, because that destroys the actual terminal
+    // layout and can hide prompts/status lines.
     val clean = line.replace('\t', ' ').replace('\u001B'.toString(), "")
     if (clean.isEmpty()) return listOf(" ")
     val out = mutableListOf<String>()
