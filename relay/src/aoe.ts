@@ -348,7 +348,7 @@ export async function watchAoeTerminal(
   };
 
   ws.on('open', () => {
-    ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 76, rows: opts.rows ?? 35 }));
+    ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 64, rows: opts.rows ?? 35 }));
     ws.send(JSON.stringify({ type: 'window', lines: opts.lines ?? 300 }));
     ws.send(JSON.stringify({ type: 'cadence', fast: true }));
     sendCapturedTerminal(0);

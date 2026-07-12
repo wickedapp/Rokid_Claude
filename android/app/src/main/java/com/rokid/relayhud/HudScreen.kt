@@ -23,7 +23,7 @@ val Green = Color(0xFF00FF00)
 val DimGreen = Color(0xFF7CE07C)
 val FocusBg = Color(0x3328FF48)
 private const val TERMINAL_VISIBLE_LINES = 35
-private const val TERMINAL_DISPLAY_WIDTH = 76
+private const val TERMINAL_DISPLAY_WIDTH = 64
 
 data class HudLine(val text: String, val color: Color = Green)
 enum class HudMode { AOE_SESSIONS, AOE_TERMINAL, AOE_REPLY_MENU, AOE_TEXT_INPUT, AOE_NEW_SESSION_MENU }
