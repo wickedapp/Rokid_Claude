@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { promisify } from 'node:util';
+import { WebSocket } from 'ws';
 
 const execFileAsync = promisify(execFile);
 const AOE_BIN = process.env.AOE_BINARY || 'aoe';
@@ -164,4 +165,96 @@ export async function createAoeSession(opts: CreateAoeSessionOptions): Promise<A
     || sessions.find((s) => s.title === title)
     || sessions[0]
     || { id: '', title, tool, group: opts.group || 'Scratch', status: 'creating', path: opts.path || '', hasTerminal: true, unread: false, age: '<1m', lastAccessedAt: new Date().toISOString() };
+}
+
+function stripAnsi(text: string): string {
+  return text.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[a-zA-Z\d]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g, '');
+}
+
+async function aoeDashboardAuth(): Promise<{ baseUrl: string; token: string }> {
+  const envUrl = process.env.AOE_DAEMON_URL || process.env.AOE_DASHBOARD_URL;
+  const envToken = process.env.AOE_DAEMON_TOKEN || process.env.AOE_DASHBOARD_TOKEN;
+  if (envUrl && envToken) return { baseUrl: envUrl.replace(/\/$/, ''), token: envToken };
+
+  const raw = await aoe(['url'], 5000);
+  const url = new URL(raw.trim());
+  const token = envToken || url.searchParams.get('token') || '';
+  url.search = '';
+  if (!token) throw new Error('AoE dashboard token missing; set AOE_DAEMON_TOKEN or run aoe serve with token auth');
+  return { baseUrl: (envUrl || url.toString()).replace(/\/$/, ''), token };
+}
+
+async function postAoeDashboard(path: string): Promise<void> {
+  const { baseUrl, token } = await aoeDashboardAuth();
+  const res = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 409) throw new Error(`AoE dashboard ${path} failed: ${res.status}`);
+}
+
+export interface AoeTerminalFrame extends AoeTerminal {
+  rows: number;
+  history: number;
+}
+
+export interface AoeTerminalWatch {
+  stop(): void;
+}
+
+export async function watchAoeTerminal(
+  id: string,
+  opts: {
+    lines?: number;
+    cols?: number;
+    rows?: number;
+    onFrame: (terminal: AoeTerminalFrame) => void;
+    onError: (err: Error) => void;
+  },
+): Promise<AoeTerminalWatch> {
+  const meta = await captureAoeSession(id, opts.lines ?? 80).catch(() => ({
+    id,
+    title: id,
+    tool: 'agent',
+    status: '',
+    content: '',
+    lines: opts.lines ?? 80,
+  }));
+  await postAoeDashboard(`/api/sessions/${encodeURIComponent(id)}/ensure`).catch(() => undefined);
+  await postAoeDashboard(`/api/sessions/${encodeURIComponent(id)}/terminal?index=0`).catch(() => undefined);
+
+  const { baseUrl, token } = await aoeDashboardAuth();
+  const httpUrl = new URL(baseUrl);
+  const wsProtocol = httpUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsProtocol}//${httpUrl.host}/sessions/${encodeURIComponent(id)}/terminal/live-ws?index=0`;
+  let closed = false;
+  const ws = new WebSocket(wsUrl, ['aoe-auth', token]);
+
+  ws.on('open', () => {
+    ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 46, rows: opts.rows ?? 36 }));
+    ws.send(JSON.stringify({ type: 'window', lines: opts.lines ?? 120 }));
+    ws.send(JSON.stringify({ type: 'cadence', fast: true }));
+  });
+  ws.on('message', (data) => {
+    if (closed) return;
+    try {
+      const msg = JSON.parse(data.toString()) as { type?: string; content?: string; rows?: number; history?: number };
+      if (msg.type !== 'frame') return;
+      opts.onFrame({
+        ...meta,
+        content: stripAnsi(msg.content ?? ''),
+        lines: opts.lines ?? meta.lines,
+        rows: typeof msg.rows === 'number' ? msg.rows : 0,
+        history: typeof msg.history === 'number' ? msg.history : 0,
+      });
+    } catch (err) {
+      opts.onError(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+  ws.on('error', (err) => { if (!closed) opts.onError(err instanceof Error ? err : new Error(String(err))); });
+  ws.on('close', (code, reason) => {
+    if (!closed && code !== 1000) opts.onError(new Error(`AoE terminal stream closed: ${code} ${reason.toString()}`));
+  });
+
+  return { stop() { closed = true; try { ws.close(1000); } catch { ws.terminate(); } } };
 }

@@ -30,17 +30,6 @@ class MainActivity : ComponentActivity() {
     private var choiceState: ChoiceState? = null
     private val gestureDeduper = GestureDeduper()
     private val countdown = Handler(Looper.getMainLooper())
-    private val terminalRefresh = Handler(Looper.getMainLooper())
-    private val terminalRefreshTick = object : Runnable {
-        override fun run() {
-            val id = hud.activeSessionId
-            if (connected.value && hud.mode == HudMode.AOE_TERMINAL && id != null) {
-                Log.d("RokidAoE", "autoRefreshTerminal=$id")
-                client.refreshAoeTerminal(id)
-            }
-            terminalRefresh.postDelayed(this, 2000)
-        }
-    }
     private var secondsLeft = 60
     private var choiceTimeoutDefault = ""
     private var lang = "zh"                       // 命令式逻辑读(matchers / client)
@@ -139,7 +128,6 @@ class MainActivity : ComponentActivity() {
             onStatus = { text, isConn -> conn.value = text; connected.value = isConn },
         )
         client.connect()
-        terminalRefresh.postDelayed(terminalRefreshTick, 2000)
 
         voice = VoiceInput(
             context = this,
@@ -336,6 +324,7 @@ class MainActivity : ComponentActivity() {
     private fun handleAoeBack(): Boolean {
         return when (hud.mode) {
             HudMode.AOE_TERMINAL -> {
+                client.unwatchAoeTerminal()
                 hud.mode = HudMode.AOE_SESSIONS
                 client.listAoeSessions()
                 true
@@ -397,7 +386,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        terminalRefresh.removeCallbacksAndMessages(null)
+        client.unwatchAoeTerminal()
         client.close()
         voice.destroy()
     }

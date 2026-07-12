@@ -70,6 +70,10 @@ class RelayClient(
     fun refreshAoeTerminal(sessionId: String) {
         send(JSONObject().put("type", "refreshAoeTerminal").put("sessionId", sessionId).put("lines", 80).toString())
     }
+    fun watchAoeTerminal(sessionId: String) {
+        send(JSONObject().put("type", "watchAoeTerminal").put("sessionId", sessionId).put("lines", 120).toString())
+    }
+    fun unwatchAoeTerminal() = send("""{"type":"unwatchAoeTerminal"}""")
     fun sendAoePrompt(sessionId: String, prompt: String) {
         send(JSONObject().put("type", "sendAoePrompt").put("sessionId", sessionId).put("prompt", prompt).put("lines", 80).toString())
     }
