@@ -77,6 +77,13 @@ class RelayClient(
     fun sendAoePrompt(sessionId: String, prompt: String) {
         send(JSONObject().put("type", "sendAoePrompt").put("sessionId", sessionId).put("prompt", prompt).put("lines", 80).toString())
     }
+    fun sendAoeTerminalKey(key: String) {
+        send(JSONObject().put("type", "sendAoeTerminalKey").put("key", key).toString())
+    }
+    fun sendAoeTerminalInput(input: String) {
+        if (input.isEmpty()) return
+        send(JSONObject().put("type", "sendAoeTerminalInput").put("input", input).toString())
+    }
     fun createAoeSession(tool: String, path: String? = null, group: String? = null) {
         val o = JSONObject().put("type", "createAoeSession").put("tool", tool).put("lines", 80)
         if (!path.isNullOrBlank()) o.put("path", path)

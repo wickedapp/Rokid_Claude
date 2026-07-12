@@ -193,6 +193,93 @@ async function postAoeDashboard(path: string): Promise<void> {
   if (!res.ok && res.status !== 409) throw new Error(`AoE dashboard ${path} failed: ${res.status}`);
 }
 
+
+function renderAnsiFrame(text: string, cols = 46, rows = 36): string {
+  const width = Math.max(10, Math.min(160, cols));
+  const height = Math.max(5, Math.min(80, rows));
+  const grid: string[][] = Array.from({ length: height }, () => Array(width).fill(' '));
+  let row = 0;
+  let col = 0;
+  const clampCursor = () => {
+    row = Math.max(0, Math.min(height - 1, row));
+    col = Math.max(0, Math.min(width - 1, col));
+  };
+  const clearLineFromCursor = () => { for (let x = col; x < width; x += 1) grid[row][x] = ' '; };
+  const clearLineToCursor = () => { for (let x = 0; x <= col; x += 1) grid[row][x] = ' '; };
+  const clearLine = () => { for (let x = 0; x < width; x += 1) grid[row][x] = ' '; };
+  const clearScreen = () => { for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) grid[y][x] = ' '; };
+  const newline = () => {
+    row += 1;
+    col = 0;
+    if (row >= height) {
+      grid.shift();
+      grid.push(Array(width).fill(' '));
+      row = height - 1;
+    }
+  };
+  const writeChar = (ch: string) => {
+    if (ch === '\n') { newline(); return; }
+    if (ch === '\r') { col = 0; return; }
+    if (ch === '\b') { col = Math.max(0, col - 1); return; }
+    if (ch < ' ') return;
+    grid[row][col] = ch;
+    col += 1;
+    if (col >= width) newline();
+  };
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '\u001b' && text[i + 1] === '[') {
+      let j = i + 2;
+      while (j < text.length && !/[A-Za-z~]/.test(text[j] ?? '')) j += 1;
+      const final = text[j] ?? '';
+      const params = text.slice(i + 2, j).replace(/[?=]/g, '').split(';').filter(Boolean).map((v) => Number(v));
+      const n = (idx: number, def: number) => Number.isFinite(params[idx]) && params[idx] > 0 ? params[idx] : def;
+      switch (final) {
+        case 'A': row -= n(0, 1); break;
+        case 'B': row += n(0, 1); break;
+        case 'C': col += n(0, 1); break;
+        case 'D': col -= n(0, 1); break;
+        case 'G': col = n(0, 1) - 1; break;
+        case 'H':
+        case 'f': row = n(0, 1) - 1; col = n(1, 1) - 1; break;
+        case 'K':
+          if ((params[0] ?? 0) === 1) clearLineToCursor();
+          else if ((params[0] ?? 0) === 2) clearLine();
+          else clearLineFromCursor();
+          break;
+        case 'J':
+          if ((params[0] ?? 0) === 2 || (params[0] ?? 0) === 3) { clearScreen(); row = 0; col = 0; }
+          break;
+        case 'm':
+        case 'h':
+        case 'l':
+          break;
+        default:
+          break;
+      }
+      clampCursor();
+      i = j;
+      continue;
+    }
+    writeChar(ch);
+  }
+  return grid.map((line) => line.join('').replace(/\s+$/g, '')).join('\n');
+}
+
+function terminalKeyInput(key: string): string {
+  switch (key) {
+    case 'enter': return '\r';
+    case 'up': return '\u001b[A';
+    case 'down': return '\u001b[B';
+    case 'left': return '\u001b[D';
+    case 'right': return '\u001b[C';
+    case 'escape': return '\u001b';
+    case 'backspace': return '\u007f';
+    default: return key;
+  }
+}
+
 export interface AoeTerminalFrame extends AoeTerminal {
   rows: number;
   history: number;
@@ -200,6 +287,8 @@ export interface AoeTerminalFrame extends AoeTerminal {
 
 export interface AoeTerminalWatch {
   stop(): void;
+  sendInput(input: string): void;
+  sendKey(key: string): void;
 }
 
 export async function watchAoeTerminal(
@@ -243,7 +332,7 @@ export async function watchAoeTerminal(
     try {
       const msg = JSON.parse(data.toString()) as { type?: string; content?: string; rows?: number; history?: number };
       if (msg.type !== 'frame') return;
-      const frameContent = stripAnsi(msg.content ?? '');
+      const frameContent = renderAnsiFrame(msg.content ?? '', opts.cols ?? 46, typeof msg.rows === 'number' ? msg.rows : (opts.rows ?? 36));
       const rawFrameLines = frameContent.split('\n');
       const firstContent = rawFrameLines.findIndex((line) => line.trim().length > 0);
       let lastContent = -1;
@@ -277,5 +366,9 @@ export async function watchAoeTerminal(
     if (!closed && code !== 1000) opts.onError(new Error(`AoE terminal stream closed: ${code} ${reason.toString()}`));
   });
 
-  return { stop() { closed = true; try { ws.close(1000); } catch { ws.terminate(); } } };
+  return {
+    stop() { closed = true; try { ws.close(1000); } catch { ws.terminate(); } },
+    sendInput(input: string) { if (!closed && ws.readyState === WebSocket.OPEN) ws.send(input); },
+    sendKey(key: string) { if (!closed && ws.readyState === WebSocket.OPEN) ws.send(terminalKeyInput(key)); },
+  };
 }

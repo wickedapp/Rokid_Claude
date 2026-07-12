@@ -206,7 +206,7 @@ export function createRelayServer(opts: ServerOptions) {
     store.on('runEnd', onRunEnd);
 
     ws.on('message', (data) => {
-      let msg: { type?: string; prompt?: string; lastRunId?: string; lastSeq?: number; wav?: string; id?: string; choice?: string; allowKey?: string; lang?: string; sessionId?: string; lines?: number; tool?: string; path?: string; group?: string; title?: string };
+      let msg: { type?: string; prompt?: string; lastRunId?: string; lastSeq?: number; wav?: string; id?: string; choice?: string; allowKey?: string; lang?: string; sessionId?: string; lines?: number; tool?: string; path?: string; group?: string; title?: string; key?: string; input?: string };
       try { msg = JSON.parse(data.toString()); } catch { return; }
 
       if (msg.type === 'hello') {
@@ -239,6 +239,8 @@ export function createRelayServer(opts: ServerOptions) {
         return;
       }
       if (msg.type === 'unwatchAoeTerminal') { stopAoeWatch(); return; }
+      if (msg.type === 'sendAoeTerminalKey' && typeof msg.key === 'string') { aoeWatch?.sendKey(msg.key); return; }
+      if (msg.type === 'sendAoeTerminalInput' && typeof msg.input === 'string') { aoeWatch?.sendInput(msg.input); return; }
       if (msg.type === 'refreshAoeTerminal' && msg.sessionId) {
         void sendAoeTerminal(send, msg.sessionId, msg.lines);
         return;

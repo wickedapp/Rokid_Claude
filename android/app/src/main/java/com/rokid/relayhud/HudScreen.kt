@@ -101,6 +101,21 @@ class HudState {
         status = "${snapshot.tool.uppercase()} / ${snapshot.title} / ${snapshot.status.uppercase()}"
     }
 
+    fun terminalLooksInteractive(): Boolean {
+        val text = terminal?.content?.takeLast(5000)?.lowercase() ?: return false
+        return listOf(
+            "❯", "›", "use arrow", "arrow keys", "press enter", "enter to",
+            "do you want", "would you like", "choose", "select", "options",
+            "yes", "no", "allow", "deny", "continue", "proceed"
+        ).any { text.contains(it) }
+    }
+
+    fun terminalAtBottom(): Boolean {
+        val content = terminal?.content ?: return true
+        val maxStart = (content.split('\n').sumOf { wrapTerminalLine(it).size } - 36).coerceAtLeast(0)
+        return terminalScroll >= maxStart - 1
+    }
+
     fun scroll(dir: Int) {
         when (mode) {
             HudMode.AOE_TERMINAL -> terminalScroll = (terminalScroll + dir).coerceIn(0, 10000)
@@ -141,7 +156,7 @@ fun HudScreen(state: HudState, connStatus: String, s: Strings, connected: Boolea
                 }
             }
             val footer = when (state.mode) {
-                HudMode.AOE_TERMINAL -> "↑↓ SCROLL  ENTER REPLY  BACK SESSIONS"
+                HudMode.AOE_TERMINAL -> if (state.terminalLooksInteractive() || state.terminalAtBottom()) "↑↓ TERM  ENTER SEND  TYPE INPUT  BACK SESSIONS" else "↑↓ SCROLL  ENTER REPLY  BACK SESSIONS"
                 HudMode.AOE_REPLY_MENU, HudMode.AOE_NEW_SESSION_MENU -> "↑↓ CHOOSE  ENTER OK  BACK CANCEL"
                 HudMode.AOE_TEXT_INPUT -> "TYPE TEXT  ENTER SEND  BACK CANCEL"
                 else -> "↑↓ MOVE  ENTER OPEN/NEW  BACK EXIT"

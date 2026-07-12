@@ -155,6 +155,19 @@ class MainActivity : ComponentActivity() {
             }
             return true
         }
+        if (hud.mode == HudMode.AOE_TERMINAL) {
+            when (keyCode) {
+                android.view.KeyEvent.KEYCODE_DEL -> { client.sendAoeTerminalKey("backspace"); return true }
+                android.view.KeyEvent.KEYCODE_ENTER, android.view.KeyEvent.KEYCODE_NUMPAD_ENTER,
+                android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> return true
+            }
+            val c = event.unicodeChar
+            if (c > 0 && !event.isCtrlPressed && !event.isMetaPressed) {
+                client.sendAoeTerminalInput(c.toChar().toString())
+                return true
+            }
+        }
         return super.onKeyDown(keyCode, event)
     }
 
@@ -198,11 +211,15 @@ class MainActivity : ComponentActivity() {
         return when (gesture) {
             GestureAction.TAP -> { onTap(); true }
             GestureAction.SCROLL_UP -> {
-                if (hud.mode == HudMode.AOE_SESSIONS) hud.moveSession(-1) else hud.scroll(-1)
+                if (hud.mode == HudMode.AOE_TERMINAL && (hud.terminalLooksInteractive() || hud.terminalAtBottom())) client.sendAoeTerminalKey("up")
+                else if (hud.mode == HudMode.AOE_SESSIONS) hud.moveSession(-1)
+                else hud.scroll(-1)
                 true
             }
             GestureAction.SCROLL_DOWN -> {
-                if (hud.mode == HudMode.AOE_SESSIONS) hud.moveSession(1) else hud.scroll(1)
+                if (hud.mode == HudMode.AOE_TERMINAL && (hud.terminalLooksInteractive() || hud.terminalAtBottom())) client.sendAoeTerminalKey("down")
+                else if (hud.mode == HudMode.AOE_SESSIONS) hud.moveSession(1)
+                else hud.scroll(1)
                 true
             }
             null -> super.onKeyUp(keyCode, event)   // 其它未映射键(滑动尾随键等)放行
@@ -288,7 +305,11 @@ class MainActivity : ComponentActivity() {
                 client.openAoeSession(session.id)
                 return
             }
-            HudMode.AOE_TERMINAL -> { hud.enterReplyMenu(); return }
+            HudMode.AOE_TERMINAL -> {
+                if (hud.terminalLooksInteractive() || hud.terminalAtBottom()) client.sendAoeTerminalKey("enter")
+                else hud.enterReplyMenu()
+                return
+            }
             HudMode.AOE_REPLY_MENU -> {
                 when (hud.replyMenuIndex) {
                     0 -> startVoiceReply()
