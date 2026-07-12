@@ -133,7 +133,7 @@ export async function listAoeSessions(): Promise<AoeSession[]> {
 }
 
 export async function captureAoeSession(id: string, lines = 38): Promise<AoeTerminal> {
-  const safeLines = Math.max(5, Math.min(120, Math.floor(lines)));
+  const safeLines = Math.max(5, Math.min(500, Math.floor(lines)));
   const raw = await aoe(['session', 'capture', id, '--json', '--strip-ansi', '-n', String(safeLines)]);
   const o = asRecord(JSON.parse(raw) as unknown);
   return {
@@ -316,47 +316,54 @@ export async function watchAoeTerminal(
   const httpUrl = new URL(baseUrl);
   const wsProtocol = httpUrl.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${wsProtocol}//${httpUrl.host}/sessions/${encodeURIComponent(id)}/terminal/live-ws?index=0`;
-  const baseLines = meta.content.split('\n');
-  let scrollbackHead = baseLines.slice(0, Math.max(0, baseLines.length - (opts.rows ?? 36)));
-  let lastFrameLines = opts.rows ?? 36;
   let closed = false;
+  let captureInFlight = false;
+  let capturePending = false;
+  let lastSentContent = meta.content;
   const ws = new WebSocket(wsUrl, ['aoe-auth', token]);
 
+  const sendCapturedTerminal = (history = 0) => {
+    if (closed) return;
+    if (captureInFlight) { capturePending = true; return; }
+    captureInFlight = true;
+    captureAoeSession(id, opts.lines ?? 300)
+      .then((latest) => {
+        if (closed) return;
+        if (latest.content !== lastSentContent) {
+          lastSentContent = latest.content;
+          opts.onFrame({
+            ...latest,
+            lines: opts.lines ?? latest.lines,
+            rows: opts.rows ?? 28,
+            history,
+          });
+        }
+      })
+      .catch((err) => opts.onError(err instanceof Error ? err : new Error(String(err))))
+      .finally(() => {
+        captureInFlight = false;
+        if (capturePending) {
+          capturePending = false;
+          sendCapturedTerminal(history);
+        }
+      });
+  };
+
   ws.on('open', () => {
-    ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 46, rows: opts.rows ?? 36 }));
-    ws.send(JSON.stringify({ type: 'window', lines: opts.lines ?? 120 }));
+    ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 72, rows: opts.rows ?? 28 }));
+    ws.send(JSON.stringify({ type: 'window', lines: opts.lines ?? 300 }));
     ws.send(JSON.stringify({ type: 'cadence', fast: true }));
   });
   ws.on('message', (data) => {
     if (closed) return;
     try {
-      const msg = JSON.parse(data.toString()) as { type?: string; content?: string; rows?: number; history?: number };
+      const msg = JSON.parse(data.toString()) as { type?: string; history?: number };
       if (msg.type !== 'frame') return;
-      const frameContent = renderAnsiFrame(msg.content ?? '', opts.cols ?? 46, typeof msg.rows === 'number' ? msg.rows : (opts.rows ?? 36));
-      const rawFrameLines = frameContent.split('\n');
-      const firstContent = rawFrameLines.findIndex((line) => line.trim().length > 0);
-      let lastContent = -1;
-      for (let i = rawFrameLines.length - 1; i >= 0; i -= 1) {
-        if (rawFrameLines[i]?.trim().length) { lastContent = i; break; }
-      }
-      const frameLines = firstContent >= 0 ? rawFrameLines.slice(firstContent, lastContent + 1) : rawFrameLines;
-      const nonBlank = frameLines.some((line) => line.trim().length > 0);
-      if (!nonBlank && meta.content.trim()) return;
-      const rows = typeof msg.rows === 'number' && msg.rows > 0 ? msg.rows : (opts.rows ?? 36);
-      if (scrollbackHead.length + lastFrameLines > baseLines.length) {
-        scrollbackHead = [...scrollbackHead, ...frameLines].slice(0, Math.max(0, (opts.lines ?? 120) - rows));
-      }
-      lastFrameLines = frameLines.length;
-      const mergedContent = meta.content.trim()
-        ? [...scrollbackHead, ...frameLines].join('\n')
-        : frameContent;
-      opts.onFrame({
-        ...meta,
-        content: mergedContent,
-        lines: opts.lines ?? meta.lines,
-        rows,
-        history: typeof msg.history === 'number' ? msg.history : 0,
-      });
+      // Use AoE live-ws as the low-latency change signal, but keep AoE capture
+      // as the source of truth for scrollback. The live frame is only the current
+      // terminal viewport; replacing the capture tail with it can hide transcript
+      // rows that are still present in `aoe session capture`.
+      sendCapturedTerminal(typeof msg.history === 'number' ? msg.history : 0);
     } catch (err) {
       opts.onError(err instanceof Error ? err : new Error(String(err)));
     }

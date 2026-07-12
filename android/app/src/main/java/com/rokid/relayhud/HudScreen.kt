@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 val Green = Color(0xFF00FF00)
 val DimGreen = Color(0xFF7CE07C)
 val FocusBg = Color(0x3328FF48)
-private const val TERMINAL_VISIBLE_LINES = 36
+private const val TERMINAL_VISIBLE_LINES = 28
 
 data class HudLine(val text: String, val color: Color = Green)
 enum class HudMode { AOE_SESSIONS, AOE_TERMINAL, AOE_REPLY_MENU, AOE_TEXT_INPUT, AOE_NEW_SESSION_MENU }
@@ -112,8 +112,7 @@ class HudState {
     fun terminalLooksInteractive(): Boolean {
         val text = terminal?.content?.takeLast(1500)?.lowercase() ?: return false
         return listOf(
-            "❯", "›", "use arrow", "arrow keys", "press enter", "enter to",
-            "do you want", "would you like", "choose an option", "select an option",
+            "use arrow", "arrow keys", "choose an option", "select an option",
             "❯ 1", "❯ yes", "❯ no"
         ).any { text.contains(it) }
     }

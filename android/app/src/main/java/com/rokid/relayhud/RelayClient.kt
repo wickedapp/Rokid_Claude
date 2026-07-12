@@ -65,13 +65,13 @@ class RelayClient(
     fun stop() = send("""{"type":"stop"}""")
     fun listAoeSessions() = send("""{"type":"listAoeSessions"}""")
     fun openAoeSession(sessionId: String) {
-        send(JSONObject().put("type", "openAoeSession").put("sessionId", sessionId).put("lines", 80).toString())
+        send(JSONObject().put("type", "openAoeSession").put("sessionId", sessionId).put("lines", 300).toString())
     }
     fun refreshAoeTerminal(sessionId: String) {
         send(JSONObject().put("type", "refreshAoeTerminal").put("sessionId", sessionId).put("lines", 80).toString())
     }
     fun watchAoeTerminal(sessionId: String) {
-        send(JSONObject().put("type", "watchAoeTerminal").put("sessionId", sessionId).put("lines", 120).toString())
+        send(JSONObject().put("type", "watchAoeTerminal").put("sessionId", sessionId).put("lines", 300).toString())
     }
     fun unwatchAoeTerminal() = send("""{"type":"unwatchAoeTerminal"}""")
     fun sendAoePrompt(sessionId: String, prompt: String) {
