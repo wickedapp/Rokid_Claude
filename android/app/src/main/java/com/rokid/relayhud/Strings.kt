@@ -1,6 +1,8 @@
 package com.rokid.relayhud
 
-/** HUD UI 文案。英文模式下全英文,无中文残留。由 config.lang 驱动。 */
+import java.util.Locale
+
+/** All user-facing HUD copy. English is the fallback; Simplified Chinese is used only for zh-Hans locales. */
 data class Strings(
     val connecting: String,
     val connected: String,
@@ -22,6 +24,7 @@ data class Strings(
     val transcribing: String,
     val stopped: String,
     val micUnauthorized: String,
+    val recordingInitFailed: String,
     val resumePrefix: String,
     val interrupted: String,
     val errored: String,
@@ -30,7 +33,6 @@ data class Strings(
     val thinking: String,
     val errorPrefix: String,
     val offlineHint: String,
-    val langSwitched: String,
     val scanHint: String,
     val wifiSaved: String,
     val wifiNotSaved: String,
@@ -39,40 +41,92 @@ data class Strings(
     val confirmHint: String,
     val configApplied: String,
     val unknownQr: String,
+    val recent: String,
+    val newClaudeSession: String,
+    val newCodexSession: String,
+    val scratchGroup: String,
+    val reply: String,
+    val textReply: String,
+    val newSession: String,
+    val enterToReply: String,
+    val voiceDictation: String,
+    val textKeyboard: String,
+    val cancel: String,
+    val replyMenuHint: String,
+    val keyboardHint: String,
+    val newSessionHint: String,
+    val openingFormat: String,
+    val creatingClaude: String,
+    val creatingCodex: String,
+    val aoeError: String,
+    val emptyReply: String,
+    val sending: String,
+    val sessionFallback: String,
+    val statusRunning: String,
+    val statusIdle: String,
+    val statusStopped: String,
+    val statusError: String,
 )
 
-private val ZH = Strings(
-    connecting = "连接中…", connected = "已连接", disconnected = "断开,重连中…", closed = "已关闭",
-    ready = "就绪", recordingDot = "● 录音中…", recordingStatus = "🎤 录音中…",
-    hint = "单击说话/停止 · 双击灭屏 · 滑动翻页 · 说\"新会话\"重开 · 说\"网络\"开WiFi · 说\"退出\"关闭", choiceHint = "前/后滑选 · 单击定",
+private val ZH_CN = Strings(
+    connecting = "连接中…", connected = "已连接", disconnected = "连接已断开，正在重连…", closed = "已关闭",
+    ready = "就绪", recordingDot = "● 录音中…", recordingStatus = "● 录音中…",
+    hint = "单击说话/停止 · 双击灭屏 · 滑动翻页", choiceHint = "上下选择 · Enter 确认",
     modelUnknown = "模型未知", sessionLabel = "会话", confirm = "需要确认", selectModel = "选择模型",
-    noSpeech = "(没听到内容)", newSessionMsg = "🆕 新会话", exitMsg = "👋 退出",
-    submitting = "提交中…", transcribing = "转写中…", stopped = "⏹ 已停止", micUnauthorized = "麦克风未授权",
-    resumePrefix = "续接", interrupted = "⚠️ 已中断", errored = "❌ 出错", done = "✅ 完成",
-    readyThinking = "🟢 已就绪 · 思考中…", thinking = "💭 思考中…", errorPrefix = "错误: ",
-    offlineHint = "单击:打开WiFi · 双击:退出",
-    langSwitched = "🌐 已切换为中文",
-    scanHint = "对准 WiFi 二维码",
-    wifiSaved = "✅ 已保存网络", wifiNotSaved = "⚠️ 未保存", cameraDenied = "相机未授权",
-    connectTo = "连接到", confirmHint = "单击确认 · 双击取消",
-    configApplied = "✅ 已配置,正在重连", unknownQr = "无法识别的二维码",
+    noSpeech = "（未听到内容）", newSessionMsg = "新会话", exitMsg = "退出",
+    submitting = "提交中…", transcribing = "转写中…", stopped = "已停止", micUnauthorized = "麦克风未授权",
+    recordingInitFailed = "录音初始化失败",
+    resumePrefix = "继续", interrupted = "已中断", errored = "出错", done = "完成",
+    readyThinking = "已就绪 · 思考中…", thinking = "思考中…", errorPrefix = "错误：",
+    offlineHint = "Enter：扫描网络 · Back：退出",
+    scanHint = "请对准 Wi-Fi 二维码",
+    wifiSaved = "网络已保存", wifiNotSaved = "网络未保存", cameraDenied = "相机未授权",
+    connectTo = "连接到", confirmHint = "Enter 确认 · Back 取消",
+    configApplied = "配置已应用，正在重连", unknownQr = "无法识别此二维码",
+    recent = "最近会话", newClaudeSession = "+ 新建 Claude 会话", newCodexSession = "+ 新建 Codex 会话",
+    scratchGroup = "临时会话", reply = "回复", textReply = "文字回复", newSession = "新建会话",
+    enterToReply = "Enter 回复", voiceDictation = "语音转文字", textKeyboard = "键盘输入", cancel = "取消",
+    replyMenuHint = "上下选择 · Enter 确认 · Back 返回终端",
+    keyboardHint = "使用蓝牙键盘输入 · Enter 发送 · Back 取消",
+    newSessionHint = "创建临时会话", openingFormat = "正在打开 %s", creatingClaude = "正在创建 Claude 会话",
+    creatingCodex = "正在创建 Codex 会话", aoeError = "AOE 错误", emptyReply = "回复内容为空",
+    sending = "正在发送…", sessionFallback = "会话", statusRunning = "运行", statusIdle = "空闲",
+    statusStopped = "已停止", statusError = "错误",
 )
 
 private val EN = Strings(
     connecting = "Connecting…", connected = "Connected", disconnected = "Disconnected, reconnecting…", closed = "Closed",
-    ready = "Ready", recordingDot = "● Recording…", recordingStatus = "🎤 Recording…",
-    hint = "tap talk/stop · double-tap blank · swipe scroll · say \"new session\" to reset · say \"network\" for WiFi · say \"exit\" to quit", choiceHint = "swipe to choose · tap to confirm",
-    modelUnknown = "no model", sessionLabel = "session", confirm = "Confirm", selectModel = "Select model",
-    noSpeech = "(nothing heard)", newSessionMsg = "🆕 New session", exitMsg = "👋 Exit",
-    submitting = "Submitting…", transcribing = "Transcribing…", stopped = "⏹ Stopped", micUnauthorized = "Mic not authorized",
-    resumePrefix = "resuming", interrupted = "⚠️ Interrupted", errored = "❌ Error", done = "✅ Done",
-    readyThinking = "🟢 Ready · thinking…", thinking = "💭 Thinking…", errorPrefix = "Error: ",
-    offlineHint = "tap: open WiFi · double-tap: exit",
-    langSwitched = "🌐 Switched to English",
-    scanHint = "aim at the WiFi QR code",
-    wifiSaved = "✅ Network saved", wifiNotSaved = "⚠️ Not saved", cameraDenied = "Camera not authorized",
-    connectTo = "Connect to", confirmHint = "tap to confirm · double-tap to cancel",
-    configApplied = "✅ Configured, reconnecting", unknownQr = "unrecognized QR code",
+    ready = "Ready", recordingDot = "● Recording…", recordingStatus = "● Recording…",
+    hint = "Enter talk/stop · Back blank · swipe scroll", choiceHint = "Up/Down select · Enter confirm",
+    modelUnknown = "Unknown model", sessionLabel = "Session", confirm = "Confirmation required", selectModel = "Select model",
+    noSpeech = "(Nothing heard)", newSessionMsg = "New session", exitMsg = "Exit",
+    submitting = "Submitting…", transcribing = "Transcribing…", stopped = "Stopped", micUnauthorized = "Microphone permission denied",
+    recordingInitFailed = "Could not start recording",
+    resumePrefix = "Resume", interrupted = "Interrupted", errored = "Error", done = "Done",
+    readyThinking = "Ready · Thinking…", thinking = "Thinking…", errorPrefix = "Error: ",
+    offlineHint = "Enter: scan network · Back: exit",
+    scanHint = "Aim at a Wi-Fi QR code",
+    wifiSaved = "Network saved", wifiNotSaved = "Network not saved", cameraDenied = "Camera permission denied",
+    connectTo = "Connect to", confirmHint = "Enter confirm · Back cancel",
+    configApplied = "Configured, reconnecting", unknownQr = "Unrecognized QR code",
+    recent = "Recent", newClaudeSession = "+ New Claude session", newCodexSession = "+ New Codex session",
+    scratchGroup = "Scratch", reply = "Reply", textReply = "Text reply", newSession = "New session",
+    enterToReply = "Enter to Reply", voiceDictation = "Voice Dictation", textKeyboard = "Keyboard Input", cancel = "Cancel",
+    replyMenuHint = "Up/Down choose · Enter confirm · Back terminal",
+    keyboardHint = "Type with a Bluetooth keyboard · Enter send · Back cancel",
+    newSessionHint = "Create a scratch session", openingFormat = "Opening %s", creatingClaude = "Creating Claude session",
+    creatingCodex = "Creating Codex session", aoeError = "AOE error", emptyReply = "Reply is empty",
+    sending = "Sending…", sessionFallback = "Session", statusRunning = "Running", statusIdle = "Idle",
+    statusStopped = "Stopped", statusError = "Error",
 )
 
-fun strings(lang: String): Strings = if (lang == "en") EN else ZH
+fun isSimplifiedChineseLocale(locale: Locale): Boolean {
+    if (!locale.language.equals("zh", ignoreCase = true)) return false
+    val script = locale.script
+    if (script.equals("Hans", ignoreCase = true)) return true
+    return locale.country.equals("CN", ignoreCase = true) || locale.country.equals("SG", ignoreCase = true)
+}
+
+fun languageCodeForLocale(locale: Locale): String = if (isSimplifiedChineseLocale(locale)) "zh" else "en"
+fun stringsForLocale(locale: Locale): Strings = if (isSimplifiedChineseLocale(locale)) ZH_CN else EN
+fun strings(lang: String): Strings = if (lang == "zh") ZH_CN else EN

@@ -37,7 +37,7 @@ import java.util.concurrent.Executors
 
 /** 离线自救主入口:相机取景 + ZXing 逐帧解 WiFi 二维码 → 系统保存网络对话框。 */
 class ScannerActivity : ComponentActivity() {
-    private val s by lazy { strings(loadLang()) }
+    private val s by lazy { stringsForLocale(resources.configuration.locales[0]) }
     private val status = mutableStateOf("")
     @Volatile private var handled = false              // 命中一次后停止处理后续帧
     private val analysisExec = Executors.newSingleThreadExecutor()
@@ -55,10 +55,6 @@ class ScannerActivity : ComponentActivity() {
             else { status.value = s.wifiNotSaved; handled = false }   // 用户取消 → 继续扫
         }
 
-    private fun loadLang(): String = try {
-        val f = java.io.File(getExternalFilesDir(null), "config.json")
-        if (f.exists()) parseConfig(f.readText()).lang else "zh"
-    } catch (_: Exception) { "zh" }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

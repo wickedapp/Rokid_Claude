@@ -36,7 +36,7 @@ data class PermissionPrompt(
     val allowKey: String,
     val highlight: Int,
     val secondsLeft: Int,
-    val title: String = "需要确认",
+    val title: String,
 )
 
 class HudState {
@@ -77,7 +77,7 @@ class HudState {
         lastWasText = true
     }
 
-    fun setAoeSessions(items: List<AoeSessionSummary>) {
+    fun setAoeSessions(items: List<AoeSessionSummary>, s: Strings) {
         // The visible AoE sidebar is grouped, so selection indices must follow that same
         // grouped order. Keeping the original recency indices made DPAD jump from the
         // first Valetax rows to Halley and left later Valetax rows unreachable.
@@ -87,7 +87,7 @@ class HudState {
         if (mode != HudMode.AOE_TERMINAL && mode != HudMode.AOE_REPLY_MENU && mode != HudMode.AOE_TEXT_INPUT) mode = HudMode.AOE_SESSIONS
         val clde = ordered.count { it.tool.contains("claude", true) }
         val cdex = ordered.count { it.tool.contains("codex", true) }
-        status = "aoe - Recent   CLDE $clde  CDEX $cdex"
+        status = "aoe - ${s.recent}   CLDE $clde  CDEX $cdex"
     }
 
     fun moveSession(delta: Int) {
@@ -96,7 +96,7 @@ class HudState {
         selectedSessionIndex = (selectedSessionIndex + delta).coerceIn(min, max)
     }
 
-    fun showTerminal(snapshot: AoeTerminalSnapshot) {
+    fun showTerminal(snapshot: AoeTerminalSnapshot, s: Strings) {
         val previous = terminal
         val sameSession = previous?.id == snapshot.id
         if (!sameSession || mode != HudMode.AOE_TERMINAL) terminalFollowBottom = true
@@ -109,7 +109,7 @@ class HudState {
             terminalScroll.coerceIn(0, bottom)
         }
         mode = HudMode.AOE_TERMINAL
-        status = "${snapshot.tool.uppercase()} / ${snapshot.title} / ${snapshot.status.uppercase()}"
+        status = "${snapshot.tool.uppercase()} / ${snapshot.title} / ${localizedAoeStatus(snapshot.status, s)}"
     }
 
     fun terminalLooksInteractive(): Boolean {
@@ -139,11 +139,11 @@ class HudState {
         }
     }
 
-    fun enterReplyMenu() { replyMenuIndex = 0; mode = HudMode.AOE_REPLY_MENU; status = "Reply" }
-    fun enterTextInput() { textInput = ""; mode = HudMode.AOE_TEXT_INPUT; status = "Text reply" }
+    fun enterReplyMenu(s: Strings) { replyMenuIndex = 0; mode = HudMode.AOE_REPLY_MENU; status = s.reply }
+    fun enterTextInput(s: Strings) { textInput = ""; mode = HudMode.AOE_TEXT_INPUT; status = s.textReply }
     fun appendText(ch: Char) { textInput += ch }
     fun backspaceText() { if (textInput.isNotEmpty()) textInput = textInput.dropLast(1) }
-    fun enterNewSessionMenu() { newSessionIndex = 0; mode = HudMode.AOE_NEW_SESSION_MENU; status = "New session" }
+    fun enterNewSessionMenu(s: Strings) { newSessionIndex = 0; mode = HudMode.AOE_NEW_SESSION_MENU; status = s.newSession }
 
     fun clear() { lines.clear(); toolIndex.clear(); lastWasText = false }
 }
@@ -157,23 +157,29 @@ fun HudScreen(state: HudState, connStatus: String, s: Strings, connected: Boolea
         Column(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 30.dp)) {
             Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("AOE TERM", style = meta.copy(color = Green), maxLines = 1, softWrap = false)
-                Text(connStatus.uppercase(), style = meta, maxLines = 1, softWrap = false)
+                Text(
+                    if (connected) "●" else "○",
+                    style = meta.copy(color = if (connected) Green else DimGreen, fontSize = 14.sp),
+                    maxLines = 1,
+                    softWrap = false,
+                )
             }
             Text(state.status, style = meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Box(Modifier.weight(1f).fillMaxWidth().background(Color.Black)) {
                 when (state.mode) {
-                    HudMode.AOE_TERMINAL -> AoeTerminalView(state, body, meta)
-                    HudMode.AOE_REPLY_MENU -> AoeReplyMenu(state, body, meta)
-                    HudMode.AOE_TEXT_INPUT -> AoeTextInput(state, body, meta)
-                    HudMode.AOE_NEW_SESSION_MENU -> AoeNewSessionMenu(state, body, meta)
-                    else -> AoeSessionList(state, body, meta)
+                    HudMode.AOE_TERMINAL -> AoeTerminalView(state, body, meta, s)
+                    HudMode.AOE_REPLY_MENU -> AoeReplyMenu(state, body, meta, s)
+                    HudMode.AOE_TEXT_INPUT -> AoeTextInput(state, body, meta, s)
+                    HudMode.AOE_NEW_SESSION_MENU -> AoeNewSessionMenu(state, body, meta, s)
+                    else -> AoeSessionList(state, body, meta, s)
                 }
             }
             val footer = when (state.mode) {
-                HudMode.AOE_TERMINAL -> if (state.terminalLooksInteractive()) "↑↓ SELECT  ENTER SEND  TYPE INPUT  BACK SESSIONS" else "↑↓ SCROLL  ENTER REPLY  BACK SESSIONS"
-                HudMode.AOE_REPLY_MENU, HudMode.AOE_NEW_SESSION_MENU -> "↑↓ CHOOSE  ENTER OK  BACK CANCEL"
-                HudMode.AOE_TEXT_INPUT -> "TYPE TEXT  ENTER SEND  BACK CANCEL"
-                else -> "↑↓ MOVE  ENTER OPEN/NEW  BACK EXIT"
+                HudMode.AOE_TERMINAL -> s.enterToReply
+                HudMode.AOE_REPLY_MENU -> s.replyMenuHint
+                HudMode.AOE_NEW_SESSION_MENU -> s.newSessionHint
+                HudMode.AOE_TEXT_INPUT -> s.keyboardHint
+                else -> "↑↓  ·  ENTER  ·  BACK"
             }
             Text(
                 if (connected) footer else s.offlineHint,
@@ -223,16 +229,16 @@ private data class SessionDisplayRow(
     val text: String,
 )
 
-private fun sessionRows(sessions: List<AoeSessionSummary>): List<SessionDisplayRow> {
+private fun sessionRows(sessions: List<AoeSessionSummary>, s: Strings): List<SessionDisplayRow> {
     val rows = mutableListOf<SessionDisplayRow>()
-    rows += SessionDisplayRow("action", -2, "+ New Claude session")
-    rows += SessionDisplayRow("action", -1, "+ New Codex session")
-    sessions.groupBy { it.group.ifBlank { "Scratch" } }.forEach { (group, items) ->
+    rows += SessionDisplayRow("action", -2, s.newClaudeSession)
+    rows += SessionDisplayRow("action", -1, s.newCodexSession)
+    sessions.groupBy { it.group.ifBlank { s.scratchGroup } }.forEach { (group, items) ->
         rows += SessionDisplayRow("header", -99, "▾ $group (${items.size})")
         items.forEach { item ->
             val idx = sessions.indexOf(item)
             val mark = if (item.unread) "*" else " "
-            val status = item.status.uppercase().let { if (it == "WAITING") "RUN" else it }
+            val status = localizedAoeStatus(item.status, s)
             rows += SessionDisplayRow(
                 "session",
                 idx,
@@ -281,9 +287,9 @@ internal fun terminalBottomStart(content: String, visibleCount: Int = TERMINAL_V
 }
 
 @Composable
-private fun AoeSessionList(state: HudState, body: TextStyle, meta: TextStyle) {
+private fun AoeSessionList(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
     val listState = rememberLazyListState()
-    val rows = remember(state.aoeSessions.toList(), state.selectedSessionIndex) { sessionRows(state.aoeSessions) }
+    val rows = remember(state.aoeSessions.toList(), state.selectedSessionIndex, s) { sessionRows(state.aoeSessions, s) }
     val focusedRow = rows.indexOfFirst { it.sessionIndex == state.selectedSessionIndex }.coerceAtLeast(0)
     LaunchedEffect(focusedRow, rows.size) { if (rows.isNotEmpty()) listState.animateScrollToItem(focusedRow) }
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
@@ -309,7 +315,7 @@ private fun AoeSessionList(state: HudState, body: TextStyle, meta: TextStyle) {
 }
 
 @Composable
-private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle) {
+private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
     val terminal = state.terminal
     val listState = rememberLazyListState()
     val rows = remember(terminal?.content) { terminal?.content?.let { terminalRows(it) } ?: emptyList() }
@@ -320,7 +326,7 @@ private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle) {
     val lines = if (windowLines.size < visibleCount) List(visibleCount - windowLines.size) { "" } + windowLines else windowLines
     LaunchedEffect(terminal?.id, terminal?.content, state.terminalScroll) { listState.scrollToItem(0) }
     Text(
-        "${toolCode(terminal?.tool ?: "AOE")} ${fitCell(terminal?.title ?: "", 21)} ${fitCell((terminal?.status ?: "").uppercase(), 6)} ${start + 1}/${rows.size.coerceAtLeast(1)}",
+        "${toolCode(terminal?.tool ?: "AOE")} ${fitCell(terminal?.title ?: "", 21)} ${fitCell(localizedAoeStatus(terminal?.status.orEmpty(), s), 6)} ${start + 1}/${rows.size.coerceAtLeast(1)}",
         style = meta.copy(color = Green),
         maxLines = 1,
         softWrap = false,
@@ -340,11 +346,19 @@ private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle) {
     }
 }
 
+internal fun localizedAoeStatus(raw: String, s: Strings): String = when (raw.uppercase()) {
+    "WAITING", "RUN", "RUNNING", "ACTIVE" -> s.statusRunning
+    "IDLE" -> s.statusIdle
+    "STOPPED", "DONE", "COMPLETED" -> s.statusStopped
+    "ERROR", "FAILED" -> s.statusError
+    else -> raw.uppercase()
+}
+
 @Composable
-private fun AoeReplyMenu(state: HudState, body: TextStyle, meta: TextStyle) {
-    val opts = listOf("Voice dictation", "Text keyboard", "Cancel")
+private fun AoeReplyMenu(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
+    val opts = listOf(s.voiceDictation, s.textKeyboard, s.cancel)
     Column(Modifier.fillMaxSize().padding(top = 20.dp), horizontalAlignment = Alignment.Start) {
-        Text("REPLY TO ${state.terminal?.title ?: "SESSION"}", style = meta.copy(color = Green))
+        Text("${s.reply.uppercase()} / ${state.terminal?.title ?: s.sessionFallback}", style = meta.copy(color = Green))
         Spacer(Modifier.height(8.dp))
         opts.forEachIndexed { i, opt ->
             val focus = i == state.replyMenuIndex
@@ -356,26 +370,26 @@ private fun AoeReplyMenu(state: HudState, body: TextStyle, meta: TextStyle) {
             )
         }
         Spacer(Modifier.height(8.dp))
-        Text("↑↓ choose · ENTER confirm · BACK terminal", style = meta)
+        Text(s.replyMenuHint, style = meta)
     }
 }
 
 @Composable
-private fun AoeTextInput(state: HudState, body: TextStyle, meta: TextStyle) {
+private fun AoeTextInput(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
     Column(Modifier.fillMaxSize().padding(top = 10.dp)) {
-        Text("TEXT REPLY", style = meta.copy(color = Green))
+        Text(s.textReply.uppercase(), style = meta.copy(color = Green))
         Spacer(Modifier.height(8.dp))
         Text("> ${state.textInput.ifBlank { "_" }}", style = body.copy(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().background(Color.Black))
         Spacer(Modifier.height(8.dp))
-        Text("BT keyboard: type · ENTER send · BACK cancel", style = meta)
+        Text(s.keyboardHint, style = meta)
     }
 }
 
 @Composable
-private fun AoeNewSessionMenu(state: HudState, body: TextStyle, meta: TextStyle) {
-    val opts = listOf("Claude", "Codex", "Cancel")
+private fun AoeNewSessionMenu(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
+    val opts = listOf("Claude", "Codex", s.cancel)
     Column(Modifier.fillMaxSize().padding(top = 20.dp)) {
-        Text("NEW SESSION", style = meta.copy(color = Green))
+        Text(s.newSession.uppercase(), style = meta.copy(color = Green))
         Spacer(Modifier.height(8.dp))
         opts.forEachIndexed { i, opt ->
             val focus = i == state.newSessionIndex
@@ -387,7 +401,7 @@ private fun AoeNewSessionMenu(state: HudState, body: TextStyle, meta: TextStyle)
             )
         }
         Spacer(Modifier.height(8.dp))
-        Text("creates scratch session; web API/aoe add compatible", style = meta)
+        Text(s.newSessionHint, style = meta)
     }
 }
 

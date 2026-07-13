@@ -16,6 +16,7 @@ import java.io.ByteArrayOutputStream
  */
 class VoiceInput(
     private val context: Context,
+    private val recordingInitError: String,
     private val onAudio: (String) -> Unit,
     private val onError: (String) -> Unit,
 ) {
@@ -37,7 +38,7 @@ class VoiceInput(
             AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, minBuf
         )
         if (record.state != AudioRecord.STATE_INITIALIZED) {
-            record.release(); main.post { onError("录音初始化失败") }; return
+            record.release(); main.post { onError(recordingInitError) }; return
         }
         recording = true
         record.startRecording()

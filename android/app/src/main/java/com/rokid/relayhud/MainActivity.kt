@@ -32,8 +32,8 @@ class MainActivity : ComponentActivity() {
     private val countdown = Handler(Looper.getMainLooper())
     private var secondsLeft = 60
     private var choiceTimeoutDefault = ""
-    private var lang = "zh"                       // 命令式逻辑读(matchers / client)
-    private val sState = mutableStateOf(strings("zh"))  // 驱动 UI 热重绘(mutableStateOf 已 import)
+    private var lang = "en"
+    private val sState = mutableStateOf(strings("en"))
     private val s get() = sState.value            // 现有所有 s.xxx 读法不变
     private val requestAudio =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { audioGranted.value = it }
@@ -78,8 +78,9 @@ class MainActivity : ComponentActivity() {
 
         tryEnableWifi()
         val cfg = loadConfig()
-        lang = cfg.lang
-        sState.value = strings(lang)
+        val systemLocale = resources.configuration.locales[0]
+        lang = languageCodeForLocale(systemLocale)
+        sState.value = stringsForLocale(systemLocale)
         conn.value = s.connecting
         hud.status = s.ready
         hud.statusline = statuslineText(null, 0.0, 0L, s)
@@ -102,7 +103,6 @@ class MainActivity : ComponentActivity() {
                         }
                         matchesExit(msg.text, lang) -> { hud.status = s.exitMsg; finish() }
                         matchesWifi(msg.text, lang) -> openWifiSettings()
-                        matchesLangSwitch(msg.text) -> switchLang(if (lang == "zh") "en" else "zh")
                         else -> {
                             hud.add("▶ $t", Color(0xFF00AA77)); hud.status = s.submitting; running = true; refreshKeepOn()
                             if (hud.mode == HudMode.AOE_TERMINAL && hud.activeSessionId != null) {
@@ -113,13 +113,13 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 } else if (msg is ServerMessage.AoeSessions) {
-                    hud.setAoeSessions(msg.sessions)
+                    hud.setAoeSessions(msg.sessions, s)
                 } else if (msg is ServerMessage.AoeTerminal) {
-                    hud.showTerminal(msg.terminal)
+                    hud.showTerminal(msg.terminal, s)
                     Log.i("RokidAoE", "terminal=${msg.terminal.id} defaultBottom=${hud.terminalScroll} contentLines=${msg.terminal.content.lineSequence().count()}")
                 } else if (msg is ServerMessage.AoeError) {
-                    hud.status = "AOE error"
-                    hud.add("AOE: ${msg.message}", Color(0xFFFF5555))
+                    hud.status = s.aoeError
+                    hud.add("${s.aoeError}: ${msg.message}", Color(0xFFFF5555))
                 } else {
                     if (msg is ServerMessage.RunEnd) { running = false; refreshKeepOn() }
                     handle(msg, hud, s)
@@ -131,6 +131,7 @@ class MainActivity : ComponentActivity() {
 
         voice = VoiceInput(
             context = this,
+            recordingInitError = s.recordingInitFailed,
             onAudio = { b64 -> recording = false; hud.recording = false; hud.status = s.transcribing; refreshKeepOn(); client.sendAudio(b64) },
             onError = { recording = false; hud.recording = false; hud.status = it; refreshKeepOn() },
         )
@@ -297,31 +298,31 @@ class MainActivity : ComponentActivity() {
         when (hud.mode) {
             HudMode.AOE_SESSIONS -> {
                 when (hud.selectedSessionIndex) {
-                    -2 -> { hud.enterNewSessionMenu(); hud.newSessionIndex = 0; return }
-                    -1 -> { hud.enterNewSessionMenu(); hud.newSessionIndex = 1; return }
+                    -2 -> { hud.enterNewSessionMenu(s); hud.newSessionIndex = 0; return }
+                    -1 -> { hud.enterNewSessionMenu(s); hud.newSessionIndex = 1; return }
                 }
                 val session = hud.aoeSessions.getOrNull(hud.selectedSessionIndex) ?: return
-                hud.status = "opening ${session.title}"
+                hud.status = s.openingFormat.format(session.title)
                 client.openAoeSession(session.id)
                 return
             }
             HudMode.AOE_TERMINAL -> {
                 if (hud.terminalLooksInteractive()) client.sendAoeTerminalKey("enter")
-                else hud.enterReplyMenu()
+                else hud.enterReplyMenu(s)
                 return
             }
             HudMode.AOE_REPLY_MENU -> {
                 when (hud.replyMenuIndex) {
                     0 -> startVoiceReply()
-                    1 -> hud.enterTextInput()
+                    1 -> hud.enterTextInput(s)
                     else -> hud.mode = HudMode.AOE_TERMINAL
                 }
                 return
             }
             HudMode.AOE_NEW_SESSION_MENU -> {
                 when (hud.newSessionIndex) {
-                    0 -> { hud.status = "creating Claude"; client.createAoeSession("claude") }
-                    1 -> { hud.status = "creating Codex"; client.createAoeSession("codex") }
+                    0 -> { hud.status = s.creatingClaude; client.createAoeSession("claude") }
+                    1 -> { hud.status = s.creatingCodex; client.createAoeSession("codex") }
                     else -> hud.mode = HudMode.AOE_SESSIONS
                 }
                 return
@@ -358,7 +359,7 @@ class MainActivity : ComponentActivity() {
             HudMode.AOE_TEXT_INPUT -> {
                 hud.textInput = ""
                 hud.mode = HudMode.AOE_REPLY_MENU
-                hud.status = "Reply"
+                hud.status = s.reply
                 true
             }
             HudMode.AOE_NEW_SESSION_MENU -> {
@@ -372,14 +373,14 @@ class MainActivity : ComponentActivity() {
 
     private fun restoreTerminalStatus() {
         val t = hud.terminal ?: return
-        hud.status = "${t.tool.uppercase()} / ${t.title} / ${t.status.uppercase()}"
+        hud.status = "${t.tool.uppercase()} / ${t.title} / ${localizedAoeStatus(t.status, s)}"
     }
 
     private fun submitTextReply() {
         val text = hud.textInput.trim()
-        if (text.isEmpty()) { hud.status = "empty reply"; return }
+        if (text.isEmpty()) { hud.status = s.emptyReply; return }
         val id = hud.activeSessionId ?: return
-        hud.status = "sending"
+        hud.status = s.sending
         hud.mode = HudMode.AOE_TERMINAL
         client.sendAoePrompt(id, text)
         hud.textInput = ""
@@ -395,15 +396,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** 直接 toggle 中英:本端热重绘 + 通知 relay + 用新语言提示。仅本次会话有效。 */
-    private fun switchLang(newLang: String) {
-        if (newLang == lang) return
-        lang = newLang
-        sState.value = strings(newLang)                 // UI 热重绘
-        client.setLang(newLang)                         // relay 跟随(whisper/字典/权限)
-        conn.value = if (connected.value) s.connected else s.disconnected  // 页脚即时换语言
-        hud.status = s.langSwitched                     // 用新语言显示
-    }
 
     override fun onDestroy() {
         super.onDestroy()

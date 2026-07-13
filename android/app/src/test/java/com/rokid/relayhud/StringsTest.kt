@@ -3,16 +3,17 @@ package com.rokid.relayhud
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 class StringsTest {
     @Test fun zhAndEnDiffer() {
         assertEquals("就绪", strings("zh").ready)
         assertEquals("Ready", strings("en").ready)
-        assertEquals("Confirm", strings("en").confirm)
+        assertEquals("Confirmation required", strings("en").confirm)
         assertEquals("Select model", strings("en").selectModel)
     }
-    @Test fun unknownLangFallsBackZh() {
-        assertEquals("就绪", strings("fr").ready)
+    @Test fun unknownLangFallsBackEnglish() {
+        assertEquals("Ready", strings("fr").ready)
     }
     @Test fun newSessionMatch() {
         assertTrue(matchesNewSession("new session", "en"))
@@ -30,12 +31,14 @@ class StringsTest {
         assertTrue(!matchesWifi("hello", "en"))
     }
     @Test fun offlineHint() {
-        assertEquals("tap: open WiFi · double-tap: exit", strings("en").offlineHint)
-        assertEquals("单击:打开WiFi · 双击:退出", strings("zh").offlineHint)
+        assertEquals("Enter: scan network · Back: exit", strings("en").offlineHint)
+        assertEquals("Enter：扫描网络 · Back：退出", strings("zh").offlineHint)
     }
-    @Test fun langSwitchedShownInTargetLang() {
-        assertEquals("🌐 已切换为中文", strings("zh").langSwitched)
-        assertEquals("🌐 Switched to English", strings("en").langSwitched)
+    @Test fun onlySimplifiedChineseSystemLocalesUseChinese() {
+        assertEquals("就绪", stringsForLocale(Locale.SIMPLIFIED_CHINESE).ready)
+        assertEquals("就绪", stringsForLocale(Locale.forLanguageTag("zh-Hans-SG")).ready)
+        assertEquals("Ready", stringsForLocale(Locale.TRADITIONAL_CHINESE).ready)
+        assertEquals("Ready", stringsForLocale(Locale.JAPANESE).ready)
     }
     @Test fun langSwitchMatchesBothLanguages() {
         assertTrue(matchesLangSwitch("切换语言"))
@@ -52,18 +55,22 @@ class StringsTest {
         assertTrue(!matchesLangSwitch("hello"))
     }
     @Test fun scannerStrings() {
-        assertEquals("对准 WiFi 二维码", strings("zh").scanHint)
-        assertEquals("aim at the WiFi QR code", strings("en").scanHint)
-        assertEquals("✅ 已保存网络", strings("zh").wifiSaved)
-        assertEquals("⚠️ 未保存", strings("zh").wifiNotSaved)
-        assertEquals("Camera not authorized", strings("en").cameraDenied)
+        assertEquals("请对准 Wi-Fi 二维码", strings("zh").scanHint)
+        assertEquals("Aim at a Wi-Fi QR code", strings("en").scanHint)
+        assertEquals("网络已保存", strings("zh").wifiSaved)
+        assertEquals("网络未保存", strings("zh").wifiNotSaved)
+        assertEquals("Camera permission denied", strings("en").cameraDenied)
     }
     @Test fun configStrings() {
         assertEquals("连接到", strings("zh").connectTo)
         assertEquals("Connect to", strings("en").connectTo)
-        assertEquals("单击确认 · 双击取消", strings("zh").confirmHint)
-        assertEquals("✅ 已配置,正在重连", strings("zh").configApplied)
-        assertEquals("无法识别的二维码", strings("zh").unknownQr)
-        assertEquals("unrecognized QR code", strings("en").unknownQr)
+        assertEquals("Enter 确认 · Back 取消", strings("zh").confirmHint)
+        assertEquals("配置已应用，正在重连", strings("zh").configApplied)
+        assertEquals("无法识别此二维码", strings("zh").unknownQr)
+        assertEquals("Unrecognized QR code", strings("en").unknownQr)
+    }
+    @Test fun terminalFooterIsOnlyReplyAction() {
+        assertEquals("Enter 回复", strings("zh").enterToReply)
+        assertEquals("Enter to Reply", strings("en").enterToReply)
     }
 }
