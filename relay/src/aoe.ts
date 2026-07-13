@@ -300,6 +300,40 @@ export interface AoeTerminalWatch {
   sendKey(key: string): void;
 }
 
+/** Owns at most one watcher and rejects late resolutions from superseded starts. */
+export class AoeWatchSlot {
+  private generation = 0;
+  private active: AoeTerminalWatch | null = null;
+
+  begin(): number {
+    this.stop();
+    return this.generation;
+  }
+
+  stop(): void {
+    this.generation += 1;
+    this.active?.stop();
+    this.active = null;
+  }
+
+  isCurrent(token: number): boolean {
+    return token === this.generation;
+  }
+
+  adopt(token: number, watch: AoeTerminalWatch): boolean {
+    if (!this.isCurrent(token)) {
+      watch.stop();
+      return false;
+    }
+    this.active = watch;
+    return true;
+  }
+
+  get current(): AoeTerminalWatch | null {
+    return this.active;
+  }
+}
+
 export async function watchAoeTerminal(
   id: string,
   opts: {

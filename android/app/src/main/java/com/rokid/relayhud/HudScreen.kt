@@ -233,7 +233,7 @@ fun HudScreen(state: HudState, connStatus: String, s: Strings, connected: Boolea
                 header = headerTextFor(state, s),
                 connected = connected,
                 actionLabel = actionDockTextFor(state, s),
-                actionFocused = state.mode == HudMode.AOE_TERMINAL || state.mode == HudMode.AOE_TEXT_INPUT,
+                actionFocused = actionDockFocusedFor(state.mode),
             ) {
                 when (state.mode) {
                     HudMode.AOE_SESSIONS -> SessionsPage(state, s)

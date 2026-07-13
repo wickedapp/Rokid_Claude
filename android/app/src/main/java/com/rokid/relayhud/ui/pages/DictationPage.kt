@@ -23,7 +23,7 @@ fun DictationListeningPage(
         header = "${displayToolName(tool)} / $session / ${if (transcribing) s.transcribing else s.listening}",
         connected = connected,
         actionLabel = if (transcribing) "[ ${s.transcribing} ]" else "[ ENTER ${s.stopSegment} ]",
-        actionFocused = !transcribing,
+        actionFocused = false,
     ) {
         Column(Modifier.fillMaxSize()) {
             Text(

@@ -11,7 +11,7 @@ import { decide, summarize } from './permission';
 import { expandPrompt, loadDictionary } from './dictionary';
 import { parseModelCommand, modelArg, type ModelAlias } from './model';
 import { tr, normalizeLang, type Lang } from './i18n';
-import { captureAoeSession, createAoeSession, listAoeSessions, sendAoeMessage, watchAoeTerminal, type AoeTerminalWatch } from './aoe';
+import { AoeWatchSlot, captureAoeSession, createAoeSession, listAoeSessions, sendAoeMessage, watchAoeTerminal } from './aoe';
 
 type RunnerFn = (opts: { prompt: string; cwd: string; sessionId?: string; model?: string }) => RunHandle;
 type TranscriberFn = (wavPath: string, modelPath: string, lang: Lang) => Promise<string>;
@@ -170,10 +170,10 @@ export function createRelayServer(opts: ServerOptions) {
     const send = (msg: unknown) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); };
     clients.add(send);
     const sentMax = new Map<string, number>();
-    let aoeWatch: AoeTerminalWatch | null = null;
-    const stopAoeWatch = () => { aoeWatch?.stop(); aoeWatch = null; };
+    const aoeWatch = new AoeWatchSlot();
+    const stopAoeWatch = () => aoeWatch.stop();
     const startAoeWatch = (sessionId: string, lines = 120) => {
-      stopAoeWatch();
+      const generation = aoeWatch.begin();
       void watchAoeTerminal(sessionId, {
         lines,
         cols: 70,
@@ -181,8 +181,8 @@ export function createRelayServer(opts: ServerOptions) {
         heartbeatMs: 1000,
         onFrame: (terminal) => send({ type: 'aoeTerminal', terminal }),
         onError: (err) => send({ type: 'aoeError', message: err.message, sessionId }),
-      }).then((watch) => { aoeWatch = watch; }).catch((err) => {
-        send({ type: 'aoeError', message: String(err), sessionId });
+      }).then((watch) => { aoeWatch.adopt(generation, watch); }).catch((err) => {
+        if (aoeWatch.isCurrent(generation)) send({ type: 'aoeError', message: String(err), sessionId });
       });
     };
     let live = false;
@@ -240,8 +240,8 @@ export function createRelayServer(opts: ServerOptions) {
         return;
       }
       if (msg.type === 'unwatchAoeTerminal') { stopAoeWatch(); return; }
-      if (msg.type === 'sendAoeTerminalKey' && typeof msg.key === 'string') { aoeWatch?.sendKey(msg.key); return; }
-      if (msg.type === 'sendAoeTerminalInput' && typeof msg.input === 'string') { aoeWatch?.sendInput(msg.input); return; }
+      if (msg.type === 'sendAoeTerminalKey' && typeof msg.key === 'string') { aoeWatch.current?.sendKey(msg.key); return; }
+      if (msg.type === 'sendAoeTerminalInput' && typeof msg.input === 'string') { aoeWatch.current?.sendInput(msg.input); return; }
       if (msg.type === 'refreshAoeTerminal' && msg.sessionId) {
         void sendAoeTerminal(send, msg.sessionId, msg.lines);
         return;

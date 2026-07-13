@@ -71,7 +71,7 @@ class ScannerActivity : ComponentActivity() {
                 header = if (pc == null) status.value else s.connectTo,
                 connected = false,
                 actionLabel = if (pc == null) "[ BACK ${s.cancel} ]" else "[ ENTER ${s.confirmAction} ]",
-                actionFocused = pc != null,
+                actionFocused = false,
             ) {
                 Box(Modifier.fillMaxSize()) {
                     AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())

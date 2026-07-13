@@ -77,3 +77,6 @@ fun actionDockTextFor(state: HudState, s: Strings): String {
     }
     return "[ENTER] $action"
 }
+
+/** Single-line BBS command docks are hints, not persistent focused controls. */
+fun actionDockFocusedFor(mode: HudMode): Boolean = false

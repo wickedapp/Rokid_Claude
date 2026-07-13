@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aoeAgentTerminalWsPath, terminalInputFrame, terminalKeyInput } from '../src/aoe';
+import { AoeWatchSlot, aoeAgentTerminalWsPath, terminalInputFrame, terminalKeyInput, type AoeTerminalWatch } from '../src/aoe';
 
 describe('AoE terminal input frames', () => {
   it('encodes navigation keys as binary terminal frames', () => {
@@ -18,5 +18,25 @@ describe('AoE terminal input frames', () => {
     const path = aoeAgentTerminalWsPath('security review');
     expect(path).toBe('/sessions/security%20review/live-ws');
     expect(path).not.toContain('/terminal/live-ws');
+  });
+
+  it('stops a watcher that resolves after a newer start or unwatch', () => {
+    const slot = new AoeWatchSlot();
+    const stopped: string[] = [];
+    const watch = (name: string): AoeTerminalWatch => ({
+      stop: () => stopped.push(name),
+      sendInput: () => undefined,
+      sendKey: () => undefined,
+    });
+
+    const stale = slot.begin();
+    const current = slot.begin();
+    expect(slot.adopt(stale, watch('stale'))).toBe(false);
+    expect(slot.adopt(current, watch('current'))).toBe(true);
+    expect(stopped).toEqual(['stale']);
+
+    slot.stop();
+    expect(stopped).toEqual(['stale', 'current']);
+    expect(slot.current).toBeNull();
   });
 });

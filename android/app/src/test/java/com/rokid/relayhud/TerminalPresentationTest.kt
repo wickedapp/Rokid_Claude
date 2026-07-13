@@ -1,6 +1,7 @@
 package com.rokid.relayhud
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
@@ -45,6 +46,12 @@ class TerminalPresentationTest {
             )
         }
         assertEquals("↑↓ Select  [ENTER] Confirm  [BACK] Sessions", actionDockTextFor(state, en))
+    }
+
+    @Test fun singleLineActionDockIsNeverAFullWidthFocusedCta() {
+        HudMode.entries.forEach { mode ->
+            assertFalse("mode=$mode", actionDockFocusedFor(mode))
+        }
     }
 
     @Test fun replyAndNewSessionMenusUseBackForCancelInsteadOfCancelRows() {
