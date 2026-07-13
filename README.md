@@ -69,7 +69,7 @@ A hobby project with a deliberately niche setup. Before you start, you'll need:
   debugging, and provisioning the first network each need a wired connection
   once — a charge-only cable won't work. After that, wireless adb and QR
   provisioning keep it cable-free.
-- **Node.js ≥ 18**, **whisper.cpp** + the `ggml-small` model, and **ngrok** (for
+- **Node.js ≥ 18**, **whisper.cpp** + the full multilingual `ggml-large-v3` model, and **ngrok** (for
   remote/out-of-home use).
 
 ## Quick Start

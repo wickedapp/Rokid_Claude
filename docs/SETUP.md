@@ -12,10 +12,11 @@ ngrok tunnel.
   otherwise the relay only gets "Not logged in".
 - **whisper.cpp** — `brew install whisper-cpp` (provides the `whisper-cli`
   binary).
-- **Whisper model** — download `ggml-small.bin` from
+- **Whisper model** — download the full multilingual `ggml-large-v3.bin` from
   [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp/tree/main)
-  and place it at `relay/models/ggml-small.bin`. This directory is gitignored and
+  and place it at `relay/models/ggml-large-v3.bin`. This directory is gitignored and
   is **not** shipped with the repo.
+  `WHISPER_MODEL_PATH` can override this path for benchmarking another model.
 - **Android client** — either sideload the prebuilt APK from the GitHub Release,
   or build it yourself with `./gradlew :app:assembleDebug`. Building needs
   **JDK 17** and the Android SDK. On macOS the system default may be an older JDK;
@@ -214,7 +215,7 @@ compatible with Java 11".** Gradle is running on an older JDK. Export
 
 **Speech gets cut off or misheard.** Speak at a normal volume, not too far from
 the mic, and pause when done. English letters/acronyms can be imperfect with the
-local `small` whisper model — phrase around them or correct afterward.
+local Whisper model — review the transcript before sending when exact identifiers matter.
 
 **Remote glasses can't reach the relay.** The config is fine; usually the Mac's
 relay/ngrok died or the Mac slept. Restart `start-remote.command`; the app

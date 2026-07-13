@@ -12,8 +12,8 @@ export function cleanWhisperOutput(raw: string): string {
     .trim();
 }
 
-/** 按语言拼 whisper-cli 参数。en 用 -l en 且不加引导词;zh 用 -l zh + 简体引导词
- * (whisper-small 默认忽繁忽简,简体 initial prompt 稳定偏向简体,避免指令词表繁体漏匹配)。 */
+/** 按语言拼 whisper-cli 参数。en 用 -l en 且不加引导词;zh 用 -l zh + 简体引导词，
+ * 让 multilingual Whisper 稳定输出简体中文并减少指令词繁简体漂移。 */
 export function whisperArgs(wavPath: string, modelPath: string, lang: Lang): string[] {
   const t = tr(lang);
   const args = ['-m', modelPath, '-f', wavPath, '-l', t.whisperLang, '-nt'];

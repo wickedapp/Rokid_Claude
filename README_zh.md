@@ -62,7 +62,7 @@ https://github.com/user-attachments/assets/2a4a304b-4600-4c17-8bcb-167e576b47e8
 - **Rokid 眼镜**(或任意安卓手机)当客户端。
 - **一根能传数据的 USB「开发线」,用于一次性配置。** 装 APK、打开 USB 调试、首次配网
   都得插线一次——只能充电的线不行。之后无线 adb + 扫码配网就免线了。
-- **Node.js ≥ 18**、**whisper.cpp** + `ggml-small` 模型;出门远程用还需 **ngrok**。
+- **Node.js ≥ 18**、**whisper.cpp** + 完整多语言 `ggml-large-v3` 模型;出门远程用还需 **ngrok**。
 
 ## 快速开始
 

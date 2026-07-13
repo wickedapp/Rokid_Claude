@@ -11,6 +11,8 @@ const root = join(__dirname, '..');
 const PORT = Number(process.env.ROKID_PORT ?? 8788);
 const token = process.env.ROKID_TOKEN;
 const claudeBinary = process.env.CLAUDE_BINARY;
+const whisperModelPath = process.env.WHISPER_MODEL_PATH?.trim()
+  || join(root, 'models', 'ggml-large-v3.bin');
 
 // 写一份含 PreToolUse hook 的 settings:写文件/Bash 类工具放行决定外包给中继(中继再问眼镜)。
 const hookScript = join(__dirname, 'permission-hook.mjs');
@@ -35,7 +37,7 @@ const { http } = createRelayServer({
   sandboxDir,
   webDir: join(root, 'web'),
   stateDir,
-  modelPath: join(root, 'models', 'ggml-small.bin'),
+  modelPath: whisperModelPath,
   token,
   dictionaryDir: root,
   runner: (o) => runClaude({ ...o, binary: claudeBinary, settingsPath }),
@@ -45,4 +47,5 @@ http.listen(PORT, () => {
   console.log(`Rokid relay 已启动: http://localhost:${PORT}`);
   console.log(`鉴权: ${token ? '已开启 (ROKID_TOKEN)' : '未开启 (本地直连)'}`);
   console.log(`sandbox: ${sandboxDir} | state: ${stateDir}`);
+  console.log(`whisper model: ${whisperModelPath}`);
 });
