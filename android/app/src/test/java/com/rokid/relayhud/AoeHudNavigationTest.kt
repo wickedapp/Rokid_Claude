@@ -49,4 +49,25 @@ class AoeHudNavigationTest {
     @Test fun terminalOnlySplitsLongUnbrokenTokens() {
         assertEquals(listOf("super", "long"), wrapTerminalLine("superlong", width = 5))
     }
+
+    @Test fun approvedTerminalViewportFitsRokidBodyAtUnifiedTypography() {
+        val content = (1..40).joinToString("\n") { "line $it" }
+        assertEquals(8, terminalBottomStart(content))
+    }
+
+    @Test fun approvedTerminalWidthWrapsBeforeTheRokidRightEdge() {
+        assertEquals(2, terminalRows("x".repeat(71)).size)
+        assertEquals(2, terminalRows("中".repeat(36)).size)
+    }
+
+    @Test fun compactSessionListHasOneActionAndOneLinePerSession() {
+        val input = listOf(
+            session("v1", "security-review", "Valetax"),
+            session("g1", "GGB", "GGB-Client"),
+        )
+        val rows = compactSessionRows(input, stringsForLocale(java.util.Locale.US))
+        assertEquals(4, rows.size)
+        assertEquals(2, rows.drop(2).size)
+        assertEquals(1, rows.count { it.contains("security-review") })
+    }
 }

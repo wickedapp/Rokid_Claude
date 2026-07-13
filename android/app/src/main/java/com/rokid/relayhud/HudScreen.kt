@@ -1,34 +1,32 @@
 package com.rokid.relayhud
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
-val Green = Color(0xFF00FF00)
-val DimGreen = Color(0xFF7CE07C)
-val FocusBg = Color(0x3328FF48)
-private const val TERMINAL_VISIBLE_LINES = 35
-private const val TERMINAL_DISPLAY_WIDTH = 64
+val Green = TerminalTokens.Foreground
+val DimGreen = TerminalTokens.Muted
+val FocusBg = TerminalTokens.FocusBackground
 
 data class HudLine(val text: String, val color: Color = Green)
-enum class HudMode { AOE_SESSIONS, AOE_TERMINAL, AOE_REPLY_MENU, AOE_TEXT_INPUT, AOE_NEW_SESSION_MENU }
+enum class HudMode {
+    AOE_SESSIONS,
+    AOE_TERMINAL,
+    AOE_REPLY_MENU,
+    AOE_TEXT_INPUT,
+    AOE_NEW_SESSION_MENU,
+    AOE_DICTATION_LISTENING,
+    AOE_DICTATION_REVIEW,
+}
 
-/** 权限选择模式的当前状态(高亮项与剩余秒数由 MainActivity 更新)。 */
 data class PermissionPrompt(
     val id: String,
     val summary: String,
@@ -48,6 +46,7 @@ class HudState {
     var terminal by mutableStateOf<AoeTerminalSnapshot?>(null)
     var replyMenuIndex by mutableStateOf(0)
     var newSessionIndex by mutableStateOf(0)
+    var creatingSession by mutableStateOf(false)
     var textInput by mutableStateOf("")
     var terminalScroll by mutableIntStateOf(0)
     var terminalFollowBottom by mutableStateOf(true)
@@ -55,6 +54,7 @@ class HudState {
     var status by mutableStateOf("")
     val toolIndex = mutableMapOf<String, Int>()
     var recording by mutableStateOf(false)
+    val dictation = DictationDraft()
     var choice by mutableStateOf<PermissionPrompt?>(null)
     var blanked by mutableStateOf(false)
     var statusline by mutableStateOf("")
@@ -65,288 +65,191 @@ class HudState {
 
     private var lastWasText = false
 
-    fun add(text: String, color: Color = Green) { lines.add(HudLine(text, color)); lastWasText = false }
+    fun add(text: String, color: Color = Green) {
+        lines.add(HudLine(text, color))
+        lastWasText = false
+    }
+
     fun addText(text: String) {
-        val parts = text.split("\n")
-        parts.forEachIndexed { i, part ->
-            if (i == 0 && lastWasText && lines.isNotEmpty()) {
-                val last = lines.size - 1
+        text.split("\n").forEachIndexed { index, part ->
+            if (index == 0 && lastWasText && lines.isNotEmpty()) {
+                val last = lines.lastIndex
                 lines[last] = lines[last].copy(text = lines[last].text + part)
-            } else lines.add(HudLine(part, Green))
+            } else {
+                lines.add(HudLine(part, Green))
+            }
         }
         lastWasText = true
     }
 
     fun setAoeSessions(items: List<AoeSessionSummary>, s: Strings) {
-        // The visible AoE sidebar is grouped, so selection indices must follow that same
-        // grouped order. Keeping the original recency indices made DPAD jump from the
-        // first Valetax rows to Halley and left later Valetax rows unreachable.
         val ordered = groupSessionsForDisplay(items)
-        aoeSessions.clear(); aoeSessions.addAll(ordered)
-        if (selectedSessionIndex >= aoeSessions.size) selectedSessionIndex = (aoeSessions.size - 1).coerceAtLeast(0)
-        if (mode != HudMode.AOE_TERMINAL && mode != HudMode.AOE_REPLY_MENU && mode != HudMode.AOE_TEXT_INPUT) mode = HudMode.AOE_SESSIONS
-        val clde = ordered.count { it.tool.contains("claude", true) }
-        val cdex = ordered.count { it.tool.contains("codex", true) }
-        status = "aoe - ${s.recent}   CLDE $clde  CDEX $cdex"
+        aoeSessions.clear()
+        aoeSessions.addAll(ordered)
+        if (selectedSessionIndex >= aoeSessions.size) {
+            selectedSessionIndex = (aoeSessions.size - 1).coerceAtLeast(0)
+        }
+        if (mode !in setOf(
+                HudMode.AOE_TERMINAL,
+                HudMode.AOE_REPLY_MENU,
+                HudMode.AOE_TEXT_INPUT,
+                HudMode.AOE_DICTATION_LISTENING,
+                HudMode.AOE_DICTATION_REVIEW,
+            )
+        ) {
+            mode = HudMode.AOE_SESSIONS
+        }
+        val claude = ordered.count { it.tool.contains("claude", true) }
+        val codex = ordered.count { it.tool.contains("codex", true) }
+        val opencode = ordered.count { it.tool.contains("open", true) }
+        status = "${s.recent} · CLAUDE $claude · CODEX $codex · OPENCODE $opencode"
     }
 
     fun moveSession(delta: Int) {
-        val min = -2 // -2 = + Claude, -1 = + Codex
+        val min = -1
         val max = (aoeSessions.size - 1).coerceAtLeast(min)
         selectedSessionIndex = (selectedSessionIndex + delta).coerceIn(min, max)
     }
 
     fun showTerminal(snapshot: AoeTerminalSnapshot, s: Strings) {
-        val previous = terminal
-        val sameSession = previous?.id == snapshot.id
+        val overlayMode = mode in setOf(
+            HudMode.AOE_REPLY_MENU,
+            HudMode.AOE_TEXT_INPUT,
+            HudMode.AOE_NEW_SESSION_MENU,
+            HudMode.AOE_DICTATION_LISTENING,
+            HudMode.AOE_DICTATION_REVIEW,
+        )
+        if (overlayMode && !(mode == HudMode.AOE_NEW_SESSION_MENU && creatingSession)) {
+            terminal = snapshot
+            activeSessionId = snapshot.id
+            return
+        }
+        creatingSession = false
+        val sameSession = terminal?.id == snapshot.id
         if (!sameSession || mode != HudMode.AOE_TERMINAL) terminalFollowBottom = true
         terminal = snapshot
         activeSessionId = snapshot.id
         val bottom = terminalBottomStart(snapshot.content)
-        terminalScroll = if (terminalFollowBottom) {
-            bottom
-        } else {
-            terminalScroll.coerceIn(0, bottom)
-        }
+        terminalScroll = if (terminalFollowBottom) bottom else terminalScroll.coerceIn(0, bottom)
         mode = HudMode.AOE_TERMINAL
-        status = "${snapshot.tool.uppercase()} / ${snapshot.title} / ${localizedAoeStatus(snapshot.status, s)}"
+        status = "${displayToolName(snapshot.tool)} / ${snapshot.title} / ${localizedAoeStatus(snapshot.status, s)}"
     }
 
     fun terminalLooksInteractive(): Boolean {
-        val text = terminal?.content?.takeLast(1500)?.lowercase() ?: return false
-        return listOf(
+        val text = terminal?.content?.takeLast(4000)?.lowercase() ?: return false
+        val explicitPrompt = listOf(
             "use arrow", "arrow keys", "choose an option", "select an option",
-            "❯ 1", "❯ yes", "❯ no"
-        ).any { text.contains(it) }
+            "enter to select", "↑/↓ to navigate", "type something",
+        ).any(text::contains)
+        val selectionCursor = text.lineSequence().any { it.trimStart().startsWith("❯ ") }
+        return explicitPrompt || selectionCursor
     }
 
     fun terminalAtBottom(): Boolean {
         val content = terminal?.content ?: return true
-        val maxStart = terminalBottomStart(content)
-        return terminalScroll >= maxStart - 1
+        return terminalScroll >= terminalBottomStart(content) - 1
     }
 
     fun scroll(dir: Int) {
         when (mode) {
             HudMode.AOE_TERMINAL -> {
-                val bottom = terminalBottomStart(terminal?.content ?: "")
+                val bottom = terminalBottomStart(terminal?.content.orEmpty())
                 terminalScroll = (terminalScroll + dir).coerceIn(0, bottom)
                 terminalFollowBottom = terminalScroll >= bottom
             }
-            HudMode.AOE_REPLY_MENU -> replyMenuIndex = (replyMenuIndex + dir).coerceIn(0, 2)
-            HudMode.AOE_NEW_SESSION_MENU -> newSessionIndex = (newSessionIndex + dir).coerceIn(0, 2)
-            else -> { scrollDir = dir; scrollTick++ }
+            HudMode.AOE_REPLY_MENU -> replyMenuIndex = (replyMenuIndex + dir).coerceIn(0, 1)
+            HudMode.AOE_NEW_SESSION_MENU -> newSessionIndex =
+                (newSessionIndex + dir).coerceIn(0, newSessionOptions().lastIndex)
+            HudMode.AOE_DICTATION_REVIEW -> dictation.moveFocus(dir)
+            HudMode.AOE_DICTATION_LISTENING -> Unit
+            else -> {
+                scrollDir = dir
+                scrollTick++
+            }
         }
     }
 
-    fun enterReplyMenu(s: Strings) { replyMenuIndex = 0; mode = HudMode.AOE_REPLY_MENU; status = s.reply }
-    fun enterTextInput(s: Strings) { textInput = ""; mode = HudMode.AOE_TEXT_INPUT; status = s.textReply }
+    fun enterReplyMenu(s: Strings) {
+        replyMenuIndex = 0
+        mode = HudMode.AOE_REPLY_MENU
+        status = s.reply
+    }
+
+    fun enterTextInput(s: Strings) {
+        textInput = ""
+        mode = HudMode.AOE_TEXT_INPUT
+        status = s.textReply
+    }
+
     fun appendText(ch: Char) { textInput += ch }
     fun backspaceText() { if (textInput.isNotEmpty()) textInput = textInput.dropLast(1) }
-    fun enterNewSessionMenu(s: Strings) { newSessionIndex = 0; mode = HudMode.AOE_NEW_SESSION_MENU; status = s.newSession }
 
-    fun clear() { lines.clear(); toolIndex.clear(); lastWasText = false }
+    fun enterNewSessionMenu(s: Strings) {
+        newSessionIndex = 0
+        creatingSession = false
+        mode = HudMode.AOE_NEW_SESSION_MENU
+        status = s.newSession
+    }
+
+    fun clear() {
+        lines.clear()
+        toolIndex.clear()
+        lastWasText = false
+    }
 }
+
+fun groupSessionsForDisplay(sessions: List<AoeSessionSummary>): List<AoeSessionSummary> =
+    sessions.groupBy { it.group.ifBlank { "Scratch" } }.values.flatten()
 
 @Composable
 fun HudScreen(state: HudState, connStatus: String, s: Strings, connected: Boolean) {
-    val body = TextStyle(color = Green, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
-    val meta = TextStyle(color = DimGreen, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
-
-    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 2.dp, vertical = 30.dp)) {
-            Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("AOE TERM", style = meta.copy(color = Green), maxLines = 1, softWrap = false)
-                Text(
-                    if (connected) "●" else "○",
-                    style = meta.copy(color = if (connected) Green else DimGreen, fontSize = 14.sp),
-                    maxLines = 1,
-                    softWrap = false,
-                )
-            }
-            Text(state.status, style = meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Box(Modifier.weight(1f).fillMaxWidth().background(Color.Black)) {
-                when (state.mode) {
-                    HudMode.AOE_TERMINAL -> AoeTerminalView(state, body, meta, s)
-                    HudMode.AOE_REPLY_MENU -> AoeReplyMenu(state, body, meta, s)
-                    HudMode.AOE_TEXT_INPUT -> AoeTextInput(state, body, meta, s)
-                    HudMode.AOE_NEW_SESSION_MENU -> AoeNewSessionMenu(state, body, meta, s)
-                    else -> AoeSessionList(state, body, meta, s)
-                }
-            }
-            val footer = when (state.mode) {
-                HudMode.AOE_TERMINAL -> s.enterToReply
-                HudMode.AOE_REPLY_MENU -> s.replyMenuHint
-                HudMode.AOE_NEW_SESSION_MENU -> s.newSessionHint
-                HudMode.AOE_TEXT_INPUT -> s.keyboardHint
-                else -> "↑↓  ·  ENTER  ·  BACK"
-            }
-            Text(
-                if (connected) footer else s.offlineHint,
-                style = meta.copy(color = Green, fontSize = 9.sp),
-                maxLines = 1,
-                softWrap = false,
+    Box(Modifier.fillMaxSize().background(TerminalTokens.Background)) {
+        val prompt = state.choice
+        if (prompt != null) {
+            PromptPage(state, prompt, s, connected)
+        } else if (state.mode == HudMode.AOE_DICTATION_LISTENING) {
+            val terminal = state.terminal
+            DictationListeningPage(
+                tool = terminal?.tool.orEmpty(),
+                session = terminal?.title ?: s.sessionFallback,
+                committed = state.dictation.committed,
+                transcribing = state.dictation.phase == DictationPhase.TRANSCRIBING,
+                s = s,
+                connected = connected,
             )
-        }
-
-        state.choice?.let { p ->
-            Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-                Column(
-                    Modifier.fillMaxWidth(0.86f).border(1.dp, Green, RoundedCornerShape(14.dp)).padding(14.dp),
-                ) {
-                    Text("${p.title} (${p.secondsLeft}s)", style = meta)
-                    Text(p.summary, style = body.copy(fontSize = 14.sp), modifier = Modifier.padding(vertical = 6.dp))
-                    p.options.forEachIndexed { i, opt ->
-                        val sel = i == p.highlight
-                        Text((if (sel) "▸ " else "   ") + opt, style = body.copy(color = if (sel) Green else DimGreen))
-                    }
-                    Text(s.choiceHint, style = meta, modifier = Modifier.padding(top = 6.dp))
-                }
-            }
-        }
-
-        if (state.blanked) Box(Modifier.fillMaxSize().background(Color.Black))
-    }
-}
-
-private fun fitCell(value: String, width: Int): String {
-    val clean = value.replace('\n', ' ').replace('\t', ' ').trim()
-    if (clean.length == width) return clean
-    if (clean.length < width) return clean.padEnd(width)
-    return clean.take((width - 1).coerceAtLeast(0)) + "…"
-}
-
-private fun toolCode(tool: String): String = when {
-    tool.contains("codex", true) -> "CDEX"
-    tool.contains("claude", true) -> "CLDE"
-    tool.contains("open", true) -> "OPEN"
-    else -> tool.uppercase().take(4).padEnd(4)
-}
-
-private data class SessionDisplayRow(
-    val kind: String,
-    val sessionIndex: Int = -99,
-    val text: String,
-)
-
-private fun sessionRows(sessions: List<AoeSessionSummary>, s: Strings): List<SessionDisplayRow> {
-    val rows = mutableListOf<SessionDisplayRow>()
-    rows += SessionDisplayRow("action", -2, s.newClaudeSession)
-    rows += SessionDisplayRow("action", -1, s.newCodexSession)
-    sessions.groupBy { it.group.ifBlank { s.scratchGroup } }.forEach { (group, items) ->
-        rows += SessionDisplayRow("header", -99, "▾ $group (${items.size})")
-        items.forEach { item ->
-            val idx = sessions.indexOf(item)
-            val mark = if (item.unread) "*" else " "
-            val status = localizedAoeStatus(item.status, s)
-            rows += SessionDisplayRow(
-                "session",
-                idx,
-                "$mark ${toolCode(item.tool)} ${fitCell(item.title, 27)} ${fitCell(item.age.ifBlank { status }, 4)}"
+        } else if (state.mode == HudMode.AOE_DICTATION_REVIEW) {
+            val terminal = state.terminal
+            DictationReviewPage(
+                tool = terminal?.tool.orEmpty(),
+                session = terminal?.title ?: s.sessionFallback,
+                committed = state.dictation.committed,
+                candidate = state.dictation.candidate,
+                s = s,
+                connected = connected,
+                focusedAction = state.dictation.focusedAction,
             )
-        }
-    }
-    return rows
-}
-
-internal fun groupSessionsForDisplay(sessions: List<AoeSessionSummary>): List<AoeSessionSummary> =
-    sessions.groupBy { it.group.ifBlank { "Scratch" } }.values.flatten()
-
-internal fun terminalRows(content: String): List<String> =
-    content.split('\n')
-        .flatMap { wrapTerminalLine(it.replace('\t', ' ').replace('\u001B'.toString(), "").trimEnd(), TERMINAL_DISPLAY_WIDTH) }
-        .dropLastWhile { it.isBlank() }
-
-internal fun wrapTerminalLine(line: String, width: Int = 64): List<String> {
-    // Keep each real terminal row as its own paragraph, but wrap that row inside
-    // the Rokid-safe display width so the right edge is never clipped. We do not
-    // join neighboring terminal rows, because that destroys the actual terminal
-    // layout and can hide prompts/status lines.
-    val clean = line.replace('\t', ' ').replace('\u001B'.toString(), "")
-    if (clean.isEmpty()) return listOf(" ")
-    val out = mutableListOf<String>()
-    var rest = clean
-    while (rest.length > width) {
-        val window = rest.take(width + 1)
-        val breakAt = window.dropLast(1).indexOfLast { it.isWhitespace() }
-        if (breakAt > 0) {
-            out += rest.take(breakAt).trimEnd()
-            rest = rest.drop(breakAt + 1).trimStart()
         } else {
-            out += rest.take(width)
-            rest = rest.drop(width).trimStart()
-        }
-    }
-    out += rest
-    return out
-}
-
-internal fun terminalBottomStart(content: String, visibleCount: Int = TERMINAL_VISIBLE_LINES): Int {
-    val count = terminalRows(content).size
-    return (count - visibleCount).coerceAtLeast(0)
-}
-
-@Composable
-private fun AoeSessionList(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
-    val listState = rememberLazyListState()
-    val rows = remember(state.aoeSessions.toList(), state.selectedSessionIndex, s) { sessionRows(state.aoeSessions, s) }
-    val focusedRow = rows.indexOfFirst { it.sessionIndex == state.selectedSessionIndex }.coerceAtLeast(0)
-    LaunchedEffect(focusedRow, rows.size) { if (rows.isNotEmpty()) listState.animateScrollToItem(focusedRow) }
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        itemsIndexed(rows) { _, row ->
-            val focus = row.sessionIndex == state.selectedSessionIndex
-            val style = when (row.kind) {
-                "header" -> meta.copy(color = DimGreen, fontSize = 10.sp)
-                "action" -> body.copy(color = if (focus) Color.Black else Green, fontSize = 11.sp)
-                else -> body.copy(color = if (focus) Color.Black else Green, fontSize = 11.sp)
+            TerminalScaffold(
+                header = headerTextFor(state, s),
+                connected = connected,
+                actionLabel = actionDockTextFor(state, s),
+                actionFocused = state.mode == HudMode.AOE_TERMINAL || state.mode == HudMode.AOE_TEXT_INPUT,
+            ) {
+                when (state.mode) {
+                    HudMode.AOE_SESSIONS -> SessionsPage(state, s)
+                    HudMode.AOE_TERMINAL -> TerminalPage(state)
+                    HudMode.AOE_REPLY_MENU -> ReplyPage(state, s)
+                    HudMode.AOE_TEXT_INPUT -> KeyboardPage(state)
+                    HudMode.AOE_NEW_SESSION_MENU -> NewSessionPage(state)
+                    HudMode.AOE_DICTATION_LISTENING, HudMode.AOE_DICTATION_REVIEW -> Unit
+                }
             }
-            Text(
-                text = (if (focus) ">" else " ") + row.text,
-                style = style,
-                modifier = Modifier.fillMaxWidth()
-                    .background(if (focus) Green else Color.Transparent)
-                    .padding(horizontal = 1.dp, vertical = if (row.kind == "header") 2.dp else 1.dp),
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip,
-            )
         }
+        if (state.blanked) Box(Modifier.fillMaxSize().background(TerminalTokens.Background))
     }
 }
 
-@Composable
-private fun AoeTerminalView(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
-    val terminal = state.terminal
-    val listState = rememberLazyListState()
-    val rows = remember(terminal?.content) { terminal?.content?.let { terminalRows(it) } ?: emptyList() }
-    val visibleCount = TERMINAL_VISIBLE_LINES
-    val maxStart = (rows.size - visibleCount).coerceAtLeast(0)
-    val start = state.terminalScroll.coerceIn(0, maxStart)
-    val windowLines = rows.drop(start).take(visibleCount)
-    val lines = if (windowLines.size < visibleCount) List(visibleCount - windowLines.size) { "" } + windowLines else windowLines
-    LaunchedEffect(terminal?.id, terminal?.content, state.terminalScroll) { listState.scrollToItem(0) }
-    Text(
-        "${toolCode(terminal?.tool ?: "AOE")} ${fitCell(terminal?.title ?: "", 21)} ${fitCell(localizedAoeStatus(terminal?.status.orEmpty(), s), 6)} ${start + 1}/${rows.size.coerceAtLeast(1)}",
-        style = meta.copy(color = Green),
-        maxLines = 1,
-        softWrap = false,
-        overflow = TextOverflow.Clip,
-    )
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        itemsIndexed(lines) { _, line ->
-            Text(
-                line.ifEmpty { " " },
-                modifier = Modifier.fillMaxWidth(),
-                style = body.copy(fontSize = 8.sp),
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip,
-            )
-        }
-    }
-}
-
-internal fun localizedAoeStatus(raw: String, s: Strings): String = when (raw.uppercase()) {
+fun localizedAoeStatus(raw: String, s: Strings): String = when (raw.uppercase()) {
     "WAITING", "RUN", "RUNNING", "ACTIVE" -> s.statusRunning
     "IDLE" -> s.statusIdle
     "STOPPED", "DONE", "COMPLETED" -> s.statusStopped
@@ -354,58 +257,6 @@ internal fun localizedAoeStatus(raw: String, s: Strings): String = when (raw.upp
     else -> raw.uppercase()
 }
 
-@Composable
-private fun AoeReplyMenu(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
-    val opts = listOf(s.voiceDictation, s.textKeyboard, s.cancel)
-    Column(Modifier.fillMaxSize().padding(top = 20.dp), horizontalAlignment = Alignment.Start) {
-        Text("${s.reply.uppercase()} / ${state.terminal?.title ?: s.sessionFallback}", style = meta.copy(color = Green))
-        Spacer(Modifier.height(8.dp))
-        opts.forEachIndexed { i, opt ->
-            val focus = i == state.replyMenuIndex
-            Text(
-                (if (focus) ">" else " ") + opt,
-                style = body.copy(color = if (focus) Color.Black else Green, fontSize = 13.sp),
-                modifier = Modifier.fillMaxWidth().background(if (focus) Green else Color.Transparent).padding(2.dp),
-                maxLines = 1,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(s.replyMenuHint, style = meta)
-    }
-}
-
-@Composable
-private fun AoeTextInput(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
-    Column(Modifier.fillMaxSize().padding(top = 10.dp)) {
-        Text(s.textReply.uppercase(), style = meta.copy(color = Green))
-        Spacer(Modifier.height(8.dp))
-        Text("> ${state.textInput.ifBlank { "_" }}", style = body.copy(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().background(Color.Black))
-        Spacer(Modifier.height(8.dp))
-        Text(s.keyboardHint, style = meta)
-    }
-}
-
-@Composable
-private fun AoeNewSessionMenu(state: HudState, body: TextStyle, meta: TextStyle, s: Strings) {
-    val opts = listOf("Claude", "Codex", s.cancel)
-    Column(Modifier.fillMaxSize().padding(top = 20.dp)) {
-        Text(s.newSession.uppercase(), style = meta.copy(color = Green))
-        Spacer(Modifier.height(8.dp))
-        opts.forEachIndexed { i, opt ->
-            val focus = i == state.newSessionIndex
-            Text(
-                (if (focus) ">" else " ") + opt,
-                style = body.copy(color = if (focus) Color.Black else Green, fontSize = 13.sp),
-                modifier = Modifier.fillMaxWidth().background(if (focus) Green else Color.Transparent).padding(2.dp),
-                maxLines = 1,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(s.newSessionHint, style = meta)
-    }
-}
-
-/** 模型 id 或别名 → 短名;组装 statusline 文本。 */
 fun shortModel(model: String?, s: Strings): String = when {
     model == null -> s.modelUnknown
     model.contains("opus", true) -> "opus"
@@ -413,8 +264,9 @@ fun shortModel(model: String?, s: Strings): String = when {
     model.contains("haiku", true) -> "haiku"
     else -> model
 }
+
 fun statuslineText(model: String?, costUsd: Double, tokens: Long, s: Strings): String {
     val cost = String.format("$%.2f", costUsd)
-    val tok = if (tokens >= 1000) "${tokens / 1000}k tok" else "$tokens tok"
-    return "${shortModel(model, s)} · ${s.sessionLabel} $cost · $tok"
+    val tokenText = if (tokens >= 1000) "${tokens / 1000}k tok" else "$tokens tok"
+    return "${shortModel(model, s)} · ${s.sessionLabel} $cost · $tokenText"
 }

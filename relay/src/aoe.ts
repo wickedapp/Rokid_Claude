@@ -267,7 +267,7 @@ function renderAnsiFrame(text: string, cols = 46, rows = 36): string {
   return grid.map((line) => line.join('').replace(/\s+$/g, '')).join('\n');
 }
 
-function terminalKeyInput(key: string): string {
+export function terminalKeyInput(key: string): string {
   switch (key) {
     case 'enter': return '\r';
     case 'up': return '\u001b[A';
@@ -278,6 +278,15 @@ function terminalKeyInput(key: string): string {
     case 'backspace': return '\u007f';
     default: return key;
   }
+}
+
+/** AoE live-ws treats binary frames as terminal input; text frames are JSON controls. */
+export function terminalInputFrame(input: string): Buffer {
+  return Buffer.from(input, 'utf8');
+}
+
+export function aoeAgentTerminalWsPath(id: string): string {
+  return `/sessions/${encodeURIComponent(id)}/live-ws`;
 }
 
 export interface AoeTerminalFrame extends AoeTerminal {
@@ -311,12 +320,13 @@ export async function watchAoeTerminal(
     lines: opts.lines ?? 80,
   }));
   await postAoeDashboard(`/api/sessions/${encodeURIComponent(id)}/ensure`).catch(() => undefined);
-  await postAoeDashboard(`/api/sessions/${encodeURIComponent(id)}/terminal?index=0`).catch(() => undefined);
 
   const { baseUrl, token } = await aoeDashboardAuth();
   const httpUrl = new URL(baseUrl);
   const wsProtocol = httpUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${wsProtocol}//${httpUrl.host}/sessions/${encodeURIComponent(id)}/terminal/live-ws?index=0`;
+  // Primary agent pane. `/terminal/live-ws?index=0` is an auxiliary paired shell and
+  // will echo keys there instead of driving Claude/Codex interactive prompts.
+  const wsUrl = `${wsProtocol}//${httpUrl.host}${aoeAgentTerminalWsPath(id)}`;
   let closed = false;
   let captureInFlight = false;
   let capturePending = false;
@@ -348,6 +358,8 @@ export async function watchAoeTerminal(
   };
 
   ws.on('open', () => {
+    // Take terminal input ownership; non-owner live-ws clients receive frames but input is ignored.
+    ws.send(JSON.stringify({ type: 'claim' }));
     ws.send(JSON.stringify({ type: 'resize', cols: opts.cols ?? 64, rows: opts.rows ?? 35 }));
     ws.send(JSON.stringify({ type: 'window', lines: opts.lines ?? 300 }));
     ws.send(JSON.stringify({ type: 'cadence', fast: true }));
@@ -375,7 +387,7 @@ export async function watchAoeTerminal(
 
   return {
     stop() { closed = true; if (heartbeat) clearInterval(heartbeat); try { ws.close(1000); } catch { ws.terminate(); } },
-    sendInput(input: string) { if (!closed && ws.readyState === WebSocket.OPEN) ws.send(input); },
-    sendKey(key: string) { if (!closed && ws.readyState === WebSocket.OPEN) ws.send(terminalKeyInput(key)); },
+    sendInput(input: string) { if (!closed && ws.readyState === WebSocket.OPEN) ws.send(terminalInputFrame(input)); },
+    sendKey(key: string) { if (!closed && ws.readyState === WebSocket.OPEN) ws.send(terminalInputFrame(terminalKeyInput(key))); },
   };
 }

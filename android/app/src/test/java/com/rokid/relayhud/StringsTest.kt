@@ -71,6 +71,6 @@ class StringsTest {
     }
     @Test fun terminalFooterIsOnlyReplyAction() {
         assertEquals("Enter 回复", strings("zh").enterToReply)
-        assertEquals("Enter to Reply", strings("en").enterToReply)
+        assertEquals("Enter To Reply", strings("en").enterToReply)
     }
 }

@@ -27,6 +27,8 @@ class MainActivity : ComponentActivity() {
     private val audioGranted = mutableStateOf(false)
     @Volatile private var recording = false
     @Volatile private var running = false
+    @Volatile private var discardPendingDictationAudio = false
+    @Volatile private var ignoreNextTranscript = false
     private var choiceState: ChoiceState? = null
     private val gestureDeduper = GestureDeduper()
     private val countdown = Handler(Looper.getMainLooper())
@@ -95,23 +97,7 @@ class MainActivity : ComponentActivity() {
                 } else if (msg is ServerMessage.PermissionRequest) {
                     enterChoice(msg)
                 } else if (msg is ServerMessage.Transcript) {
-                    val t = msg.text.trim().trim('。', '，', '!', '！', '.', ' ')
-                    when {
-                        t.isEmpty() -> hud.status = s.noSpeech
-                        matchesNewSession(msg.text, lang) -> {
-                            client.newSession(); hud.clear(); hud.status = s.newSessionMsg
-                        }
-                        matchesExit(msg.text, lang) -> { hud.status = s.exitMsg; finish() }
-                        matchesWifi(msg.text, lang) -> openWifiSettings()
-                        else -> {
-                            hud.add("▶ $t", Color(0xFF00AA77)); hud.status = s.submitting; running = true; refreshKeepOn()
-                            if (hud.mode == HudMode.AOE_TERMINAL && hud.activeSessionId != null) {
-                                client.sendAoePrompt(hud.activeSessionId!!, t)
-                            } else {
-                                client.sendPrompt(t)
-                            }
-                        }
-                    }
+                    handleTranscript(msg)
                 } else if (msg is ServerMessage.AoeSessions) {
                     hud.setAoeSessions(msg.sessions, s)
                 } else if (msg is ServerMessage.AoeTerminal) {
@@ -132,7 +118,18 @@ class MainActivity : ComponentActivity() {
         voice = VoiceInput(
             context = this,
             recordingInitError = s.recordingInitFailed,
-            onAudio = { b64 -> recording = false; hud.recording = false; hud.status = s.transcribing; refreshKeepOn(); client.sendAudio(b64) },
+            onAudio = { b64 ->
+                recording = false
+                hud.recording = false
+                if (discardPendingDictationAudio) {
+                    discardPendingDictationAudio = false
+                } else {
+                    if (hud.dictation.active) hud.dictation.markTranscribing()
+                    hud.status = s.transcribing
+                    client.sendAudio(b64)
+                }
+                refreshKeepOn()
+            },
             onError = { recording = false; hud.recording = false; hud.status = it; refreshKeepOn() },
         )
 
@@ -173,6 +170,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
+
         if (hud.blanked) {
             // 灭屏态:吞掉所有事件;仅"真手势"(单击/双击/滑动)才唤醒,避免预触发漏到 onTap
             if (Gestures.map(keyCode, android.view.KeyEvent.ACTION_UP) != null ||
@@ -273,7 +271,7 @@ class MainActivity : ComponentActivity() {
 
     /** 活跃(录音/运行/待权限)且未灭屏 → 屏常亮;否则交系统超时灭屏。 */
     private fun refreshKeepOn() {
-        val on = (recording || running || hud.choice != null) && !hud.blanked
+        val on = (recording || running || hud.choice != null || hud.dictation.active) && !hud.blanked
         runOnUiThread {
             if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -295,11 +293,11 @@ class MainActivity : ComponentActivity() {
 
     /** 单击:列表页打开/新建 AoE session;终端页进入 Reply;菜单页确认。 */
     private fun onTap() {
+
         when (hud.mode) {
             HudMode.AOE_SESSIONS -> {
                 when (hud.selectedSessionIndex) {
-                    -2 -> { hud.enterNewSessionMenu(s); hud.newSessionIndex = 0; return }
-                    -1 -> { hud.enterNewSessionMenu(s); hud.newSessionIndex = 1; return }
+                    -1 -> { hud.enterNewSessionMenu(s); return }
                 }
                 val session = hud.aoeSessions.getOrNull(hud.selectedSessionIndex) ?: return
                 hud.status = s.openingFormat.format(session.title)
@@ -314,16 +312,24 @@ class MainActivity : ComponentActivity() {
             HudMode.AOE_REPLY_MENU -> {
                 when (hud.replyMenuIndex) {
                     0 -> startVoiceReply()
-                    1 -> hud.enterTextInput(s)
-                    else -> hud.mode = HudMode.AOE_TERMINAL
+                    else -> hud.enterTextInput(s)
                 }
                 return
             }
+            HudMode.AOE_DICTATION_LISTENING -> {
+                if (recording) voice.stop()
+                return
+            }
+            HudMode.AOE_DICTATION_REVIEW -> {
+                handleDictationReviewAction()
+                return
+            }
             HudMode.AOE_NEW_SESSION_MENU -> {
+                hud.creatingSession = true
                 when (hud.newSessionIndex) {
                     0 -> { hud.status = s.creatingClaude; client.createAoeSession("claude") }
                     1 -> { hud.status = s.creatingCodex; client.createAoeSession("codex") }
-                    else -> hud.mode = HudMode.AOE_SESSIONS
+                    else -> { hud.status = s.creatingOpenCode; client.createAoeSession("opencode") }
                 }
                 return
             }
@@ -362,7 +368,12 @@ class MainActivity : ComponentActivity() {
                 hud.status = s.reply
                 true
             }
+            HudMode.AOE_DICTATION_LISTENING, HudMode.AOE_DICTATION_REVIEW -> {
+                cancelDictationSession()
+                true
+            }
             HudMode.AOE_NEW_SESSION_MENU -> {
+                hud.creatingSession = false
                 hud.mode = HudMode.AOE_SESSIONS
                 client.listAoeSessions()
                 true
@@ -373,7 +384,7 @@ class MainActivity : ComponentActivity() {
 
     private fun restoreTerminalStatus() {
         val t = hud.terminal ?: return
-        hud.status = "${t.tool.uppercase()} / ${t.title} / ${localizedAoeStatus(t.status, s)}"
+        hud.status = "${displayToolName(t.tool)} / ${t.title} / ${localizedAoeStatus(t.status, s)}"
     }
 
     private fun submitTextReply() {
@@ -388,12 +399,112 @@ class MainActivity : ComponentActivity() {
 
     private fun startVoiceReply() {
         if (audioGranted.value) {
-            hud.mode = HudMode.AOE_TERMINAL
-            voice.start(); recording = true; hud.recording = true; hud.status = s.recordingStatus
-            refreshKeepOn()
+            discardPendingDictationAudio = false
+            ignoreNextTranscript = false
+            hud.dictation.begin()
+            startNextDictationSegment()
         } else {
-            hud.status = s.micUnauthorized; requestAudio.launch(Manifest.permission.RECORD_AUDIO)
+            hud.status = s.micUnauthorized
+            requestAudio.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    private fun startNextDictationSegment() {
+        hud.mode = HudMode.AOE_DICTATION_LISTENING
+        hud.status = s.recordingStatus
+        voice.start()
+        recording = true
+        hud.recording = true
+        refreshKeepOn()
+    }
+
+    private fun handleTranscript(msg: ServerMessage.Transcript) {
+        if (ignoreNextTranscript) {
+            ignoreNextTranscript = false
+            return
+        }
+        if (hud.dictation.active) {
+            val text = msg.text.trim()
+            if (text.isEmpty()) {
+                hud.status = s.noSpeech
+                hud.dictation.redoCurrent()
+                startNextDictationSegment()
+            } else {
+                hud.dictation.receiveTranscript(text)
+                hud.mode = HudMode.AOE_DICTATION_REVIEW
+                hud.status = s.dictationReview
+                refreshKeepOn()
+            }
+            return
+        }
+
+        val text = msg.text.trim().trim('。', '，', '!', '！', '.', ' ')
+        when {
+            text.isEmpty() -> hud.status = s.noSpeech
+            matchesNewSession(msg.text, lang) -> {
+                client.newSession(); hud.clear(); hud.status = s.newSessionMsg
+            }
+            matchesExit(msg.text, lang) -> { hud.status = s.exitMsg; finish() }
+            matchesWifi(msg.text, lang) -> openWifiSettings()
+            else -> {
+                hud.add("▶ $text", Color(0xFF00AA77))
+                hud.status = s.submitting
+                running = true
+                refreshKeepOn()
+                if (hud.mode == HudMode.AOE_TERMINAL && hud.activeSessionId != null) {
+                    client.sendAoePrompt(hud.activeSessionId!!, text)
+                } else {
+                    client.sendPrompt(text)
+                }
+            }
+        }
+    }
+
+    private fun handleDictationReviewAction() {
+        when (hud.dictation.focusedAction) {
+            0 -> {
+                val text = hud.dictation.textToSend()
+                if (text.isBlank()) {
+                    hud.status = s.emptyReply
+                    return
+                }
+                val id = hud.activeSessionId ?: return
+                hud.dictation.finish()
+                hud.mode = HudMode.AOE_TERMINAL
+                hud.status = s.sending
+                running = true
+                client.sendAoePrompt(id, text)
+                refreshKeepOn()
+            }
+            1 -> {
+                hud.dictation.continueListening()
+                startNextDictationSegment()
+            }
+            2 -> {
+                hud.dictation.redoCurrent()
+                startNextDictationSegment()
+            }
+            else -> {
+                // Cancel only the candidate. Confirmed preview segments are intentionally preserved.
+                hud.dictation.cancelCurrent()
+                startNextDictationSegment()
+            }
+        }
+    }
+
+    private fun cancelDictationSession() {
+        if (recording) {
+            discardPendingDictationAudio = true
+            voice.stop()
+            recording = false
+            hud.recording = false
+        } else if (hud.dictation.phase == DictationPhase.TRANSCRIBING) {
+            ignoreNextTranscript = true
+        }
+        hud.dictation.finish()
+        hud.mode = HudMode.AOE_REPLY_MENU
+        hud.status = s.reply
+        refreshKeepOn()
     }
 
 

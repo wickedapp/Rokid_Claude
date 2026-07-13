@@ -19,13 +19,12 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.zxing.BinaryBitmap
@@ -67,20 +66,22 @@ class ScannerActivity : ComponentActivity() {
     private fun startCamera() {
         val previewView = PreviewView(this)
         setContent {
-            Box(Modifier.fillMaxSize()) {
-                AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-                val pc = pendingConfig.value
-                if (pc != null) {
-                    Text(
-                        "${s.connectTo}\n${pc.serverUrl}\n\n${s.confirmHint}",
-                        color = Color(0xFF00FF88), fontSize = 14.sp,
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                    )
-                } else {
-                    Text(
-                        status.value, color = Color(0xFF00FF88), fontSize = 14.sp,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
-                    )
+            val pc = pendingConfig.value
+            TerminalScaffold(
+                header = if (pc == null) status.value else s.connectTo,
+                connected = false,
+                actionLabel = if (pc == null) "[ BACK ${s.cancel} ]" else "[ ENTER ${s.confirmAction} ]",
+                actionFocused = pc != null,
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                    if (pc != null) {
+                        Text(
+                            "${s.connectTo}\n${pc.serverUrl}",
+                            style = TerminalTokens.Text,
+                            modifier = Modifier.align(Alignment.Center).background(TerminalTokens.Background).padding(TerminalTokens.Space16),
+                        )
+                    }
                 }
             }
         }

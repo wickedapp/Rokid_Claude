@@ -53,11 +53,15 @@ Spacing is also page-specific: 1/2/5/8/10/14/20dp values are mixed rather than f
 - Terminal header becomes `CODEX / Code-Review2 / 运行` with the icon at the right edge.
 - Header, BodyViewport, and ActionDock have separate opaque bounds and divider lines.
 - Agent output is the only content allowed in Terminal BodyViewport.
-- `Enter 回复` becomes a 52px full-width rectangular button in ActionDock.
+- `Enter 回复` becomes a compact 30px bracketed BBS command row inside a fixed 36px ActionDock.
 - All app-visible text uses one 10sp monospace token and one 14sp line-height.
 - Hierarchy uses placement, muted color, separators, and focus fill—not larger text.
 - Reply Method contains only Dictation and Keyboard; Back cancels.
 - Dictation review uses the sole two-row ActionDock variant.
+
+### 2026-07-14 real-device density correction
+
+The first migrated version was still too phone-like: 44dp session rows and a full-width inverse Enter row reduced usable information. The corrected production baseline is 9sp/12sp monospace, 24dp flat table rows, 28dp Header, 24dp Footer, and a 20dp left-aligned inverse command cluster. Sessions render in one navigation-ordered table without group-header cards. Terminal uses a 70-cell, 32-row CJK-aware viewport. Interactive Claude/Codex prompts use the primary agent `/sessions/:id/live-ws` stream so Up/Down controls the real option cursor; the auxiliary `/terminal/live-ws` stream must not be used for agent prompt input.
 
 ## Refactor sequence
 
@@ -67,7 +71,7 @@ Create tokens, theme, `TerminalScaffold`, `HeaderBar`, `BodyViewport`, `ActionDo
 
 ### Phase 2 — Read-only pages
 
-Migrate Sessions and Terminal first. These establish row density, terminal wrapping, header truncation, scroll behavior, and full-width footer action. Verify on the named `Code-Review2` session.
+Migrate Sessions and Terminal first. These establish row density, terminal wrapping, header truncation, scroll behavior, and compact footer commands. Verify on the named `Code-Review2` and `security-review` sessions.
 
 ### Phase 3 — Input pages
 
@@ -94,8 +98,8 @@ For each migrated page:
 3. Build/install on connected Rokid glasses.
 4. UIAutomator text and bounds capture.
 5. 480×640 screenshot review for hierarchy, clipping, and consistent type.
-6. Positive and negative assertion (e.g. Footer is a button; footer text is absent from terminal body).
+6. Positive and negative assertion (e.g. Footer is a compact command line rather than a CTA; footer text is absent from terminal body).
 
 ## Decision gate
 
-Do not begin Phase 1 production migration until the user approves Draft v1 typography, region geometry, Header content, and footer/action behavior.
+**Passed 2026-07-14.** The user approved Design System v2 typography, region geometry, Header content, and compact BBS action behavior and instructed implementation to begin.
