@@ -232,6 +232,7 @@ ui/pages/PromptPage.kt
 ## 7. Acceptance checks
 
 - [ ] `AOE TERM` appears on no page.
+- [ ] Tool labels use the approved full names (`CODEX`, `CLAUDE`, `OPENCODE`) rather than `CDEX`/`CLDE` abbreviations.
 - [ ] Every page has exactly one HeaderBar, one BodyViewport, and one ActionDock.
 - [ ] Header/body/footer bounds never overlap on 480×640.
 - [ ] All visible text resolves to the single 10sp token.

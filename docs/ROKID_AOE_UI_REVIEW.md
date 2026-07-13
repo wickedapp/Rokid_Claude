@@ -38,6 +38,9 @@ Spacing is also page-specific: 1/2/5/8/10/14/20dp values are mixed rather than f
 
 - `HudScreen` defines local `body` and `meta` styles, then every page overrides them with `.copy(fontSize = ...)`.
 - Header, content, and footer are anonymous blocks inside a single `Column`; they are not reusable components with enforced bounds.
+- `AoeTerminalView` places its metadata `Text` and a `LazyColumn.fillMaxSize()` as siblings inside the same outer `Box`. They can draw from the same origin, creating a real overlap risk rather than merely weak visual hierarchy.
+- Tool naming is inconsistent: the UI emits abbreviated `CDEX`, while the requested product label is `CODEX`.
+- `state.lines` continues to collect non-AoE agent events, but the active AoE page router does not render that collection; this is orphaned UI state that must either receive a real Body component or be removed after protocol consolidation.
 - Footer is a plain `Text`, not a button component.
 - Reply and New Session duplicate the same manual focused-row loop.
 - Permission/model prompt uses a rounded 14dp modal that does not belong to the BBS terminal visual language.
